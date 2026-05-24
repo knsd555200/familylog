@@ -329,10 +329,10 @@ export default function CommunityDetailPage() {
                   <div key={c.id}>
                     <div className="flex gap-2.5">
                       {/* users 조인 객체의 avatar_url (mock 댓글의 author 문자열과 구분) */}
-                      <img src={c.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      <img src={(typeof c.author === 'object' && c.author !== null ? c.author.avatar_url : null) ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                          <span className="text-xs font-medium">{c.author?.nickname ?? '패밀로그 회원'}</span>
+                          <span className="text-xs font-medium">{(typeof c.author === 'object' && c.author !== null ? c.author.nickname : null) ?? '패밀로그 회원'}</span>
                           <span className="text-[10px] text-brand-muted">{c.author?.bio}</span>
                         </div>
                         <p className="text-sm leading-relaxed">{c.content}</p>
