@@ -20,6 +20,8 @@ interface AuthContextType {
   loginWithKakao: () => void
   logout: () => void
   isLoggedIn: boolean
+  // 세션 초기화가 완료되기 전까지 true (로그인 상태 확인 전 깜박임 방지용)
+  isLoading: boolean
   showOnboarding: boolean
   setShowOnboarding: (v: boolean) => void
 }
@@ -29,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   loginWithKakao: () => {},
   logout: () => {},
   isLoggedIn: false,
+  isLoading: true,
   showOnboarding: false,
   setShowOnboarding: () => {},
 })
@@ -69,42 +72,48 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  // 세션 확인이 완료되기 전까지 true — 이 값이 true인 동안 UI를 숨겨 깜박임 방지
+  const [isLoading, setIsLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
-    // 앱 시작 시 저장된 세션 복원 (손상·만료 시 로컬 스토리지 정리)
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      if (error) {
-        await supabase.auth.signOut()
-        setUser(null)
-        return
-      }
-      if (session?.user) {
-        const built = await buildUser(session.user)
-        setUser(built)
-      }
-    })
+    // INITIAL_SESSION이 3초 내 발생하지 않으면 강제로 isLoading 해제 (방어적 처리)
+    const loadingTimeout = setTimeout(() => setIsLoading(false), 3000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // 토큰 갱신은 이미 로그인된 상태이므로 사용자 재조회 불필요
+      if (event === 'TOKEN_REFRESHED') return
+
       if (session?.user) {
-        const built = await buildUser(session.user)
-        setUser(built)
-        const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
-        const shouldHide = hideUntil && Date.now() < Number(hideUntil)
-        if (!shouldHide && window.location.pathname !== '/signup') {
-          setShowOnboarding(true)
+        try {
+          const built = await buildUser(session.user)
+          setUser(built)
+        } catch {
+          setUser(null)
+        }
+        // 온보딩은 명시적 로그인 시에만 표시 (초기 세션 복원 시에는 표시하지 않음)
+        if (event === 'SIGNED_IN') {
+          const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
+          const shouldHide = hideUntil && Date.now() < Number(hideUntil)
+          if (!shouldHide && window.location.pathname !== '/signup') {
+            setShowOnboarding(true)
+          }
         }
       } else {
-        // 로그아웃 또는 토큰 갱신 실패 시 오염된 로컬 세션 제거
-        const tokenRefreshFailed = event === 'TOKEN_REFRESHED' && !session
-        if (event === 'SIGNED_OUT' || tokenRefreshFailed) {
-          await supabase.auth.signOut()
-        }
         setUser(null)
+      }
+
+      // INITIAL_SESSION은 마운트 시 정확히 한 번 발생 — 세션 확인 완료 시점
+      if (event === 'INITIAL_SESSION') {
+        clearTimeout(loadingTimeout)
+        setIsLoading(false)
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(loadingTimeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
   const loginWithKakao = async () => {
@@ -123,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loginWithKakao, logout, isLoggedIn: !!user, showOnboarding, setShowOnboarding }}>
+    <AuthContext.Provider value={{ user, loginWithKakao, logout, isLoggedIn: !!user, isLoading, showOnboarding, setShowOnboarding }}>
       {children}
     </AuthContext.Provider>
   )

@@ -75,10 +75,11 @@ export default function AuthCallbackPage() {
         if (dbError) throw dbError
 
         const nickname = data?.nickname?.trim()
-        router.replace(nickname ? '/feed' : '/signup')
+        // 풀 페이지 이동: 세션이 localStorage에 저장된 후 새 페이지가 INITIAL_SESSION을 올바르게 수신하도록
+        window.location.replace(nickname ? '/feed' : '/signup')
       } catch {
         // 토큰 교환·세션·DB 오류 등 모든 실패 시 로그인으로 이동
-        router.replace('/login')
+        window.location.replace('/login')
       }
     }
 
