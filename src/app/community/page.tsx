@@ -248,7 +248,7 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!user) return
-    const allIds = [...new Set([...popularPosts.map(p => p.id), ...latestPosts.map(p => p.id)])]
+    const allIds = Array.from(new Set([...popularPosts.map(p => p.id), ...latestPosts.map(p => p.id)]))
     getMyLikes(allIds).then(setLikedIds)
   }, [user, popularPosts.length, latestPosts.length])
 
