@@ -181,7 +181,7 @@ export default function EventDetailPage() {
       {/* 썸네일 히어로 */}
       <div className="relative h-56 lg:h-72">
         {event.thumbnail_url
-          ? <img src={event.thumbnail_url} alt={event.title} className="w-full h-full object-cover" />
+          ? <img src={event.thumbnail_url ?? undefined} alt={event.title} className="w-full h-full object-cover" />
           : <div className="w-full h-full bg-brand-card flex items-center justify-center text-brand-muted text-sm">이미지 없음</div>
         }
         {event.category && (
