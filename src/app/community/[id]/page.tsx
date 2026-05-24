@@ -324,10 +324,11 @@ export default function CommunityDetailPage() {
                   </div>
                 ))
               ) : (
-                // DB 댓글
-                topLevelComments.map(c => (
+                // DB 댓글 (topLevelComments는 mock Comment와 합쳐져 author가 string으로 추론되므로 dbComments만 사용)
+                dbComments.filter(c => !c.parent_comment_id).map(c => (
                   <div key={c.id}>
                     <div className="flex gap-2.5">
+                      {/* users 조인 객체의 avatar_url (mock 댓글의 author 문자열과 구분) */}
                       <img src={c.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
