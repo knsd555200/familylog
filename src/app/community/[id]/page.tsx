@@ -95,7 +95,8 @@ export default function CommunityDetailPage() {
     getComments(id).then(setDbComments)
 
     // 내 좋아요 여부
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null
       if (!user) return
       supabase
         .from('likes')
@@ -109,7 +110,8 @@ export default function CommunityDetailPage() {
   }, [params.id])
 
   const handleLike = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user ?? null
     if (!user) { router.push('/login'); return }
     const isLiked = liked
     setLiked(!isLiked)
@@ -119,7 +121,8 @@ export default function CommunityDetailPage() {
 
   const handleSubmitComment = async () => {
     if (!comment.trim()) return
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user ?? null
     if (!user) { router.push('/login'); return }
 
     setSubmitting(true)

@@ -155,12 +155,12 @@ function PostPreview({
 function CommunityContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  // isLoading: 세션 확인이 끝나기 전까지 true (로그인 상태 깜박임 방지)
-  const { user, isLoading } = useAuth()
+  const { user } = useAuth()
   const [tab, setTab] = useState<typeof TABS[number]>('전체')
   const sort: SortType = searchParams.get('sort') === 'latest' ? '최신순' : '인기순'
-  const [popularPosts, setPopularPosts] = useState<CardPost[]>(feedPosts.map(feedToCard))
-  const [latestPosts, setLatestPosts] = useState<CardPost[]>(communityPosts.map(communityToCard))
+  const [popularPosts, setPopularPosts] = useState<CardPost[]>([])
+  const [latestPosts, setLatestPosts] = useState<CardPost[]>([])
+  const [postsLoading, setPostsLoading] = useState(true)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const likingRef = useRef<Set<string>>(new Set())
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
@@ -172,6 +172,8 @@ function CommunityContent() {
   // 실천 탭 상단 행사 배너 (post_type='event' 글, 최신 5개)
   const [practiceEvents, setPracticeEvents] = useState<EventPost[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
+
+  const hasFetchedPosts = useRef(false)
 
   // 행사 배너 가로 스크롤 — 마우스 드래그
   const eventBannerScrollRef = useRef<HTMLDivElement>(null)
@@ -220,21 +222,22 @@ function CommunityContent() {
   }
 
   useEffect(() => {
-    getDbFeedPosts().then(dbPosts => {
-      const dbCards = dbPosts.map(feedToCard)
-      const mockCards = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
-      setPopularPosts([...dbCards, ...mockCards])
-    })
-  }, [])
+    if (hasFetchedPosts.current) return
+    hasFetchedPosts.current = true
+    console.log('[community] posts fetch 시작')
+    setPostsLoading(true)
+    Promise.all([getDbFeedPosts(), getDbCommunityPosts()])
+      .then(([dbFeedPosts, dbCommunityPosts]) => {
+        console.log('[community] posts fetch 완료 — feedPosts:', dbFeedPosts.length, '/ communityPosts:', dbCommunityPosts.length)
+        const dbFeedCards = dbFeedPosts.map(feedToCard)
+        const mockFeedCards = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
+        setPopularPosts([...dbFeedCards, ...mockFeedCards])
 
-  useEffect(() => {
-    getDbCommunityPosts().then(dbPosts => {
-      if (dbPosts.length > 0) {
-        const dbCards = dbPosts.map(communityToCard)
-        const mockCards = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
-        setLatestPosts([...dbCards, ...mockCards])
-      }
-    })
+        const dbCommunityCards = dbCommunityPosts.map(communityToCard)
+        const mockCommunityCards = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
+        setLatestPosts([...dbCommunityCards, ...mockCommunityCards])
+      })
+      .finally(() => setPostsLoading(false))
   }, [])
 
   // 실천 탭 선택 시 post_type='event' 행사 글 최신 5개 조회
@@ -260,7 +263,8 @@ function CommunityContent() {
 
     likingRef.current.add(postId)
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const currentUser = session?.user ?? null
       if (!currentUser) { router.push('/login'); return }
       const isLiked = likedIds.has(postId)
       setLikedIds(prev => {
@@ -329,15 +333,6 @@ function CommunityContent() {
   const handleCommentCountChange = useCallback((postId: string, count: number) => {
     setCommentCounts(prev => ({ ...prev, [postId]: count }))
   }, [])
-
-  // 세션 초기화가 완료되기 전에는 스피너만 표시 (페이지 깜박임 방지)
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
 
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-6">
@@ -450,7 +445,25 @@ function CommunityContent() {
           </div>
         </div>
 
-        {filtered.map(post => {
+        {postsLoading ? (
+          [1, 2, 3].map(n => (
+            <div key={n} className="bg-white rounded-2xl border border-brand-line p-4 animate-pulse">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-9 h-9 rounded-full bg-brand-card flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 bg-brand-card rounded w-24" />
+                  <div className="h-2.5 bg-brand-card rounded w-16" />
+                </div>
+              </div>
+              <div className="h-4 bg-brand-card rounded w-3/4 mb-2" />
+              <div className="space-y-1.5">
+                <div className="h-3 bg-brand-card rounded" />
+                <div className="h-3 bg-brand-card rounded w-5/6" />
+                <div className="h-3 bg-brand-card rounded w-2/3" />
+              </div>
+            </div>
+          ))
+        ) : filtered.map(post => {
           const isExpanded = expandedIds.has(post.id)
 
           return (

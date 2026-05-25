@@ -92,6 +92,7 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
     .order('is_pinned', { ascending: false })
     .limit(100)
 
+  console.log('[getDbFeedPosts] data:', data, '/ error:', error)
   if (error || !data) return []
 
   const now = Date.now()
@@ -142,6 +143,8 @@ export async function getDbCommunityPosts(): Promise<CommunityPost[]> {
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(50)
+
+  console.log('[getDbCommunityPosts] data:', data, '/ error:', error)
   if (error || !data) return []
 
   const commentCounts = await fetchCommentCountsByPostId(data.map(p => p.id))
@@ -166,7 +169,8 @@ export async function createPost(params: {
   event_merit_reward?: number
   event_is_closed?: boolean
 }): Promise<{ success: boolean; id?: string; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { success: false, error: '로그인이 필요해요' }
 
   // post_type별 DB 저장 값 결정
@@ -221,7 +225,8 @@ export async function createPost(params: {
 export async function deletePost(postId: string): Promise<{ success: boolean; error?: string }> {
   if (!isUUID(postId)) return { success: false, error: '삭제할 수 없는 글입니다' }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { success: false, error: '로그인이 필요해요' }
 
   const { data: post, error: fetchError } = await supabase
@@ -278,7 +283,8 @@ export async function updatePost(
 ): Promise<{ success: boolean; error?: string }> {
   if (!isUUID(postId)) return { success: false, error: '수정할 수 없는 글입니다' }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { success: false, error: '로그인이 필요해요' }
 
   const { data: post, error: fetchError } = await supabase
@@ -311,7 +317,8 @@ export async function updatePost(
 // ─── 좋아요 ───────────────────────────────────────────────────────────────
 
 export async function getMyLikes(postIds: string[]): Promise<Set<string>> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return new Set()
 
   const validIds = postIds.filter(isUUID)
@@ -330,7 +337,8 @@ export async function getMyLikes(postIds: string[]): Promise<Set<string>> {
 export async function toggleLike(postId: string): Promise<{ liked: boolean; error?: string }> {
   if (!isUUID(postId)) return { liked: true }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { liked: false, error: '로그인이 필요해요' }
 
   const { data: existing } = await supabase
@@ -435,7 +443,8 @@ export async function createComment(params: {
   // 댓글 첨부 이미지 URLs (event 글 댓글에서만 전달, 최대 1장)
   media_urls?: string[]
 }): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { success: false, error: '로그인이 필요해요' }
 
   const { data, error } = await supabase
@@ -469,7 +478,8 @@ export async function createComment(params: {
 }
 
 export async function deleteComment(commentId: string): Promise<{ success: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { success: false, error: '로그인이 필요해요' }
 
   const { data: comment, error: fetchError } = await supabase
@@ -505,7 +515,8 @@ export async function deleteComment(commentId: string): Promise<{ success: boole
 }
 
 export async function getMyCommentLikes(commentIds: string[]): Promise<Set<string>> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user || commentIds.length === 0) return new Set()
 
   const validIds = commentIds.filter(isUUID)
@@ -523,7 +534,8 @@ export async function getMyCommentLikes(commentIds: string[]): Promise<Set<strin
 }
 
 export async function toggleCommentLike(commentId: string): Promise<{ liked: boolean; error?: string }> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return { liked: false, error: '로그인이 필요해요' }
 
   const { data: existing } = await supabase
@@ -562,7 +574,8 @@ export interface Notification {
 }
 
 export async function getNotifications(): Promise<Notification[]> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return []
 
   const { data, error } = await supabase
@@ -577,7 +590,8 @@ export async function getNotifications(): Promise<Notification[]> {
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return
 
   await supabase
@@ -588,7 +602,8 @@ export async function markAllNotificationsRead(): Promise<void> {
 }
 
 export async function getUnreadNotificationCount(): Promise<number> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) return 0
 
   const { count } = await supabase

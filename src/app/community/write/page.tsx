@@ -95,60 +95,60 @@ export default function CommunityWritePage() {
   const handleSubmit = async () => {
     if (!title.trim())   return setError('제목을 입력해주세요')
     if (!content.trim()) return setError('내용을 입력해주세요')
-
-    // 행사 글은 시작일시 필수
     if (isEvent && !eventStartAt) return setError('행사 시작일시를 입력해주세요')
 
     setLoading(true)
     setError('')
 
-    // 이미지 업로드
-    let media_urls: string[] = []
-    if (imageFiles.length > 0) {
-      const { urls, error: uploadError } = await uploadImages(imageFiles)
-      if (uploadError) {
-        setError(uploadError)
-        setLoading(false)
-        return
+    try {
+      // 이미지 업로드
+      let media_urls: string[] = []
+      if (imageFiles.length > 0) {
+        const { urls, error: uploadError } = await uploadImages(imageFiles)
+        if (uploadError) {
+          setError(uploadError)
+          return
+        }
+        media_urls = urls
       }
-      media_urls = urls
-    }
 
-    const result = await createPost(
-      isEvent
-        ? {
-            // 행사 글: post_type='event', 카테고리는 'practice'(실천)로 자동 고정
-            post_type:              'event',
-            title:                  title.trim(),
-            content:                content.trim(),
-            category:               'practice',
-            visibility:             'public', // 행사 글은 전체 공개 고정
-            media_urls,
-            thumbnail_url:          media_urls[0] ?? undefined,
-            event_start_at:         eventStartAt  || null,
-            event_end_at:           eventEndAt    || null,
-            event_location:         eventLocation.trim() || null,
-            event_max_participants: eventMaxParticipants ? Number(eventMaxParticipants) : null,
-            event_merit_reward:     eventMeritReward ? Number(eventMeritReward) : 50,
-            event_is_closed:        false,
-          }
-        : {
-            // 일반 글
-            post_type:    'community',
-            title:        title.trim(),
-            content:      content.trim(),
-            category:     CATEGORY_MAP[category],
-            visibility,
-            media_urls,
-            thumbnail_url: media_urls[0] ?? undefined,
-          }
-    )
+      const result = await createPost(
+        isEvent
+          ? {
+              post_type:              'event',
+              title:                  title.trim(),
+              content:                content.trim(),
+              category:               'practice',
+              visibility:             'public',
+              media_urls,
+              thumbnail_url:          media_urls[0] ?? undefined,
+              event_start_at:         eventStartAt  || null,
+              event_end_at:           eventEndAt    || null,
+              event_location:         eventLocation.trim() || null,
+              event_max_participants: eventMaxParticipants ? Number(eventMaxParticipants) : null,
+              event_merit_reward:     eventMeritReward ? Number(eventMeritReward) : 50,
+              event_is_closed:        false,
+            }
+          : {
+              post_type:    'community',
+              title:        title.trim(),
+              content:      content.trim(),
+              category:     CATEGORY_MAP[category],
+              visibility,
+              media_urls,
+              thumbnail_url: media_urls[0] ?? undefined,
+            }
+      )
 
-    if (result.success) {
-      router.push('/community')
-      router.refresh()
-    } else {
-      setError(result.error ?? '저장에 실패했어요. 다시 시도해주세요.')
+      if (result.success) {
+        router.push('/community')
+        router.refresh()
+      } else {
+        setError(result.error ?? '저장에 실패했어요. 다시 시도해주세요.')
+      }
+    } catch {
+      setError('저장에 실패했어요. 다시 시도해주세요.')
+    } finally {
       setLoading(false)
     }
   }

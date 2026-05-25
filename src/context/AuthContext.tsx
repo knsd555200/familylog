@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 
 interface User {
@@ -72,34 +72,64 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  // onAuthStateChange 클로저에서 최신 uid를 읽기 위한 ref (state는 클로저에서 stale하게 읽힘)
+  const currentUidRef = useRef<string | null>(null)
   // 세션 확인이 완료되기 전까지 true — 이 값이 true인 동안 UI를 숨겨 깜박임 방지
   const [isLoading, setIsLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
+
+  // 탭 비활성 중 브라우저 타이머 스로틀링으로 자동 갱신이 누락되는 경우 방어
+  // — 탭이 다시 활성화될 때 getSession()이 만료 여부를 확인하고 필요 시 즉시 갱신
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
 
   useEffect(() => {
     // INITIAL_SESSION이 3초 내 발생하지 않으면 강제로 isLoading 해제 (방어적 처리)
     const loadingTimeout = setTimeout(() => setIsLoading(false), 3000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[auth] onAuthStateChange:', event, '/ session:', session ? `uid=${session.user.id} expires=${session.expires_at}` : null)
+
       // 토큰 갱신은 이미 로그인된 상태이므로 사용자 재조회 불필요
       if (event === 'TOKEN_REFRESHED') return
 
+      if (event === 'SIGNED_OUT') {
+        console.warn('[auth] SIGNED_OUT 발생 — 원인 후보: refresh token 만료·무효화, 다른 탭 로그아웃, 서버 세션 삭제')
+        console.warn('[auth] SIGNED_OUT 발생 시각:', new Date().toISOString(), '/ 현재 경로:', window.location.pathname)
+      }
+
       if (session?.user) {
-        try {
-          const built = await buildUser(session.user)
-          setUser(built)
-        } catch {
-          setUser(null)
-        }
-        // 온보딩은 명시적 로그인 시에만 표시 (초기 세션 복원 시에는 표시하지 않음)
-        if (event === 'SIGNED_IN') {
-          const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
-          const shouldHide = hideUntil && Date.now() < Number(hideUntil)
-          if (!shouldHide && window.location.pathname !== '/signup') {
-            setShowOnboarding(true)
+        // 이미 같은 uid로 로그인된 상태면 SIGNED_IN 재처리 불필요
+        if (event === 'SIGNED_IN' && currentUidRef.current === session.user.id) {
+          console.log('[auth] SIGNED_IN 무시 — 이미 동일 uid로 로그인 상태:', session.user.id)
+        } else {
+          try {
+            const built = await buildUser(session.user)
+            currentUidRef.current = built.id
+            setUser(built)
+          } catch (err) {
+            console.error('[auth] buildUser 실패 — user를 null로 초기화:', err)
+            currentUidRef.current = null
+            setUser(null)
+          }
+          // 온보딩은 명시적 로그인 시에만 표시 (초기 세션 복원 시에는 표시하지 않음)
+          if (event === 'SIGNED_IN') {
+            const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
+            const shouldHide = hideUntil && Date.now() < Number(hideUntil)
+            if (!shouldHide && window.location.pathname !== '/signup') {
+              setShowOnboarding(true)
+            }
           }
         }
       } else {
+        currentUidRef.current = null
         setUser(null)
       }
 
