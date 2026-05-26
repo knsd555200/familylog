@@ -254,7 +254,7 @@ function CommunityContent() {
     if (!user) return
     const allIds = Array.from(new Set([...popularPosts.map(p => p.id), ...latestPosts.map(p => p.id)]))
     getMyLikes(allIds).then(setLikedIds)
-  }, [user, popularPosts.length, latestPosts.length])
+  }, [user, popularPosts, latestPosts])
 
   const handleLike = async (e: React.MouseEvent, postId: string) => {
     e.preventDefault()
