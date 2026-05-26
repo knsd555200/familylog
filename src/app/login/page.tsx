@@ -45,8 +45,7 @@ export default function LoginPage() {
       setError('이메일 또는 비밀번호가 틀렸어요')
       setLoading(false)
     } else {
-      // 전체 페이지 새로고침으로 이동해 세션·상태가 확실히 반영되도록 함
-      window.location.href = '/community'
+      router.push('/community')
     }
   }
 

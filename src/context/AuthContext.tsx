@@ -92,17 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
 
-  // 탭 비활성 중 브라우저 타이머 스로틀링으로 자동 갱신이 누락되는 경우 방어
-  // — 탭이 다시 활성화될 때 getSession()이 만료 여부를 확인하고 필요 시 즉시 갱신
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        supabase.auth.getSession()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [])
 
   useEffect(() => {
     // INITIAL_SESSION이 3초 내 발생하지 않으면 강제로 isLoading 해제 (방어적 처리)

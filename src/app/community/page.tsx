@@ -173,8 +173,6 @@ function CommunityContent() {
   const [practiceEvents, setPracticeEvents] = useState<EventPost[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
 
-  const hasFetchedPosts = useRef(false)
-
   // 행사 배너 가로 스크롤 — 마우스 드래그
   const eventBannerScrollRef = useRef<HTMLDivElement>(null)
   const eventBannerDragRef = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
@@ -222,13 +220,9 @@ function CommunityContent() {
   }
 
   useEffect(() => {
-    if (hasFetchedPosts.current) return
-    hasFetchedPosts.current = true
-    console.log('[community] posts fetch 시작')
     setPostsLoading(true)
     Promise.all([getDbFeedPosts(), getDbCommunityPosts()])
       .then(([dbFeedPosts, dbCommunityPosts]) => {
-        console.log('[community] posts fetch 완료 — feedPosts:', dbFeedPosts.length, '/ communityPosts:', dbCommunityPosts.length)
         const dbFeedCards = dbFeedPosts.map(feedToCard)
         const mockFeedCards = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
         setPopularPosts([...dbFeedCards, ...mockFeedCards])
@@ -236,6 +230,10 @@ function CommunityContent() {
         const dbCommunityCards = dbCommunityPosts.map(communityToCard)
         const mockCommunityCards = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
         setLatestPosts([...dbCommunityCards, ...mockCommunityCards])
+      })
+      .catch(() => {
+        setPopularPosts(feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard))
+        setLatestPosts(communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard))
       })
       .finally(() => setPostsLoading(false))
   }, [])
