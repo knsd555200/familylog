@@ -36,8 +36,12 @@ const FOOTPRINTS = [
 
 export default function MyPage() {
   const router = useRouter()
-  const { user, isLoggedIn, logout } = useAuth()
+  const { user, isLoggedIn, isLoading, logout } = useAuth()
   const [section, setSection] = useState<'footprint' | 'points' | 'settings'>('footprint')
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-24 text-brand-muted text-sm">불러오는 중...</div>
+  }
 
   if (!isLoggedIn) {
     return (

@@ -1,14 +1,22 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import { ChevronLeft } from 'lucide-react'
 
 type Tab = 'login' | 'signup'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { isLoggedIn, isLoading } = useAuth()
+
+  useEffect(() => {
+    if (!isLoading && isLoggedIn) {
+      router.replace('/community')
+    }
+  }, [isLoggedIn, isLoading, router])
 
   const [tab, setTab] = useState<Tab>('login')
 
