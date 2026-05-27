@@ -153,6 +153,19 @@ function PostPreview({
 }
 
 function CommunityContent() {
+  useEffect(() => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('mount_log') ?? '[]')
+      localStorage.setItem('mount_log', JSON.stringify([...existing, { event: 'mounted', at: new Date().toISOString() }].slice(-50)))
+    } catch {}
+    return () => {
+      try {
+        const existing = JSON.parse(localStorage.getItem('mount_log') ?? '[]')
+        localStorage.setItem('mount_log', JSON.stringify([...existing, { event: 'unmounted', at: new Date().toISOString() }].slice(-50)))
+      } catch {}
+    }
+  }, [])
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
