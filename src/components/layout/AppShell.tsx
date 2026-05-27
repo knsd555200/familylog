@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useLayoutEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import BottomNav from './BottomNav'
 import Sidebar from './Sidebar'
@@ -17,15 +17,14 @@ function isChatDetail(pathname: string) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [splashDone, setSplashDone] = useState<boolean | null>(null)
+  const [splashDone, setSplashDone] = useState<boolean>(false)
   const { showOnboarding, setShowOnboarding } = useAuth()
 
   const hideNav = NO_NAV_PATHS.some(p => pathname.startsWith(p)) || isChatDetail(pathname)
   const isFeed = pathname === FEED_PATH || pathname === '/'
 
-  useEffect(() => {
-    const seen = sessionStorage.getItem('familog_splash')
-    setSplashDone(!!seen)
+  useLayoutEffect(() => {
+    setSplashDone(!!sessionStorage.getItem('familog_splash'))
   }, [])
 
   const handleSplashDone = () => {
@@ -35,7 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {splashDone === false && <SplashScreen onDone={handleSplashDone} />}
+      {!splashDone && <SplashScreen onDone={handleSplashDone} />}
 
       <div className={`transition-opacity duration-300 ${splashDone ? 'opacity-100' : 'opacity-0'}`}>
         {/* Desktop sidebar */}
