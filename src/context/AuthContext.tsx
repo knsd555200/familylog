@@ -70,6 +70,20 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
   }
 }
 
+function logAuth(event: string, uid: string | null, message: string) {
+  try {
+    const existing = JSON.parse(localStorage.getItem('auth_debug_log') ?? '[]')
+    const next = [...existing, {
+      event,
+      uid,
+      message,
+      pathname: window.location.pathname,
+      at: new Date().toISOString(),
+    }]
+    localStorage.setItem('auth_debug_log', JSON.stringify(next.slice(-50)))
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   // onAuthStateChange 클로저에서 최신 uid를 읽기 위한 ref (state는 클로저에서 stale하게 읽힘)
@@ -84,19 +98,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const loadingTimeout = setTimeout(() => setIsLoading(false), 3000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const sessionDesc = session ? `uid=${session.user.id} expires=${session.expires_at}` : 'null'
+      logAuth(event, session?.user.id ?? null, `onAuthStateChange: ${event} / session: ${sessionDesc}`)
+
       // 토큰 갱신은 이미 로그인된 상태이므로 사용자 재조회 불필요
       if (event === 'TOKEN_REFRESHED') return
+
+      if (event === 'SIGNED_OUT') {
+        logAuth('SIGNED_OUT', null, 'SIGNED_OUT 발생 — 원인 후보: refresh token 만료·무효화, 다른 탭 로그아웃, 서버 세션 삭제')
+      }
 
       if (session?.user) {
         // 이미 같은 uid로 로그인된 상태면 SIGNED_IN 재처리 불필요
         if (event === 'SIGNED_IN' && currentUidRef.current === session.user.id) {
-          // no-op
+          logAuth('SIGNED_IN_SKIPPED', session.user.id, '이미 동일 uid로 로그인 상태')
         } else {
           try {
             const built = await buildUser(session.user)
             currentUidRef.current = built.id
             setUser(built)
-          } catch {
+          } catch (err) {
+            logAuth('BUILD_USER_ERROR', session.user.id, `buildUser 실패: ${err instanceof Error ? err.message : String(err)}`)
             currentUidRef.current = null
             setUser(null)
           }
