@@ -156,12 +156,23 @@ function CommunityContent() {
   useEffect(() => {
     try {
       const existing = JSON.parse(localStorage.getItem('mount_log') ?? '[]')
-      localStorage.setItem('mount_log', JSON.stringify([...existing, { event: 'mounted', at: new Date().toISOString() }].slice(-50)))
+      localStorage.setItem('mount_log', JSON.stringify([...existing, {
+        event: 'mounted',
+        pathname: window.location.pathname,
+        at: new Date().toISOString(),
+      }].slice(-50)))
     } catch {}
     return () => {
       try {
         const existing = JSON.parse(localStorage.getItem('mount_log') ?? '[]')
-        localStorage.setItem('mount_log', JSON.stringify([...existing, { event: 'unmounted', at: new Date().toISOString() }].slice(-50)))
+        const authLog = JSON.parse(localStorage.getItem('auth_debug_log') ?? '[]')
+        const lastAuth = authLog.length > 0 ? authLog[authLog.length - 1] : null
+        localStorage.setItem('mount_log', JSON.stringify([...existing, {
+          event: 'unmounted',
+          pathname: window.location.pathname,
+          lastAuthEvent: lastAuth,
+          at: new Date().toISOString(),
+        }].slice(-50)))
       } catch {}
     }
   }, [])
