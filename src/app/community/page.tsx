@@ -179,7 +179,7 @@ function CommunityContent() {
 
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const [tab, setTab] = useState<typeof TABS[number]>('전체')
   const sort: SortType = searchParams.get('sort') === 'latest' ? '최신순' : '인기순'
   const [popularPosts, setPopularPosts] = useState<CardPost[]>([])
@@ -244,6 +244,7 @@ function CommunityContent() {
   }
 
   useEffect(() => {
+    if (authLoading) return
     setPostsLoading(true)
     let popularCount = 0
     let latestCount = 0
@@ -280,7 +281,7 @@ function CommunityContent() {
           }))
         } catch {}
       })
-  }, [])
+  }, [authLoading])
 
   // 실천 탭 선택 시 post_type='event' 행사 글 최신 5개 조회
   useEffect(() => {
