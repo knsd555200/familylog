@@ -37,7 +37,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <>
       {splashDone === false && <SplashScreen onDone={handleSplashDone} />}
 
-      {splashDone !== null && (
       <div className={`transition-opacity duration-300 ${splashDone ? 'opacity-100' : 'opacity-0'}`}>
         {/* Desktop sidebar */}
         {!hideNav && (
@@ -62,7 +61,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </div>
-      )}
 
       {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
     </>

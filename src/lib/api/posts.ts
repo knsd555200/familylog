@@ -92,7 +92,6 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
     .order('is_pinned', { ascending: false })
     .limit(100)
 
-  console.log('[getDbFeedPosts] data:', data, '/ error:', error)
   if (error || !data) return []
 
   const now = Date.now()
@@ -144,7 +143,6 @@ export async function getDbCommunityPosts(): Promise<CommunityPost[]> {
     .order('created_at', { ascending: false })
     .limit(50)
 
-  console.log('[getDbCommunityPosts] data:', data, '/ error:', error)
   if (error || !data) return []
 
   const commentCounts = await fetchCommentCountsByPostId(data.map(p => p.id))
