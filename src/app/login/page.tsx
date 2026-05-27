@@ -13,7 +13,7 @@ export default function LoginPage() {
   const { isLoggedIn, isLoading } = useAuth()
 
   useEffect(() => {
-    if (!isLoading && isLoggedIn) {
+    if (!isLoading && isLoggedIn && window.location.pathname !== '/community') {
       router.replace('/community')
     }
   }, [isLoggedIn, isLoading, router])
