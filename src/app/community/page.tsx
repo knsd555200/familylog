@@ -221,21 +221,41 @@ function CommunityContent() {
 
   useEffect(() => {
     setPostsLoading(true)
+    let popularCount = 0
+    let latestCount = 0
     Promise.all([getDbFeedPosts(), getDbCommunityPosts()])
       .then(([dbFeedPosts, dbCommunityPosts]) => {
         const dbFeedCards = dbFeedPosts.map(feedToCard)
         const mockFeedCards = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
-        setPopularPosts([...dbFeedCards, ...mockFeedCards])
+        const popular = [...dbFeedCards, ...mockFeedCards]
+        setPopularPosts(popular)
+        popularCount = popular.length
 
         const dbCommunityCards = dbCommunityPosts.map(communityToCard)
         const mockCommunityCards = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
-        setLatestPosts([...dbCommunityCards, ...mockCommunityCards])
+        const latest = [...dbCommunityCards, ...mockCommunityCards]
+        setLatestPosts(latest)
+        latestCount = latest.length
       })
       .catch(() => {
-        setPopularPosts(feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard))
-        setLatestPosts(communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard))
+        const popular = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
+        const latest = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
+        setPopularPosts(popular)
+        setLatestPosts(latest)
+        popularCount = popular.length
+        latestCount = latest.length
       })
-      .finally(() => setPostsLoading(false))
+      .finally(() => {
+        setPostsLoading(false)
+        try {
+          localStorage.setItem('render_debug_log', JSON.stringify({
+            popularCount,
+            latestCount,
+            postsLoading: false,
+            timestamp: new Date().toISOString(),
+          }))
+        } catch {}
+      })
   }, [])
 
   // 실천 탭 선택 시 post_type='event' 행사 글 최신 5개 조회
