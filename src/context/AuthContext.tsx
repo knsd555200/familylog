@@ -113,9 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === 'SIGNED_IN' && currentUidRef.current === session.user.id) {
           logAuth('SIGNED_IN_SKIPPED', session.user.id, '이미 동일 uid로 로그인 상태')
         } else {
+          currentUidRef.current = session.user.id
           try {
             const built = await buildUser(session.user)
-            currentUidRef.current = built.id
             setUser(built)
           } catch (err) {
             logAuth('BUILD_USER_ERROR', session.user.id, `buildUser 실패: ${err instanceof Error ? err.message : String(err)}`)
