@@ -92,16 +92,6 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
     .order('is_pinned', { ascending: false })
     .limit(100)
 
-  try {
-    const existing = JSON.parse(localStorage.getItem('fetch_debug_log') ?? '[]')
-    localStorage.setItem('fetch_debug_log', JSON.stringify([...existing, {
-      fn: 'getDbFeedPosts',
-      count: data?.length ?? 0,
-      error: error?.message ?? null,
-      at: new Date().toISOString(),
-    }].slice(-50)))
-  } catch {}
-
   if (error || !data) return []
 
   const now = Date.now()
@@ -152,16 +142,6 @@ export async function getDbCommunityPosts(): Promise<CommunityPost[]> {
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(50)
-
-  try {
-    const existing = JSON.parse(localStorage.getItem('fetch_debug_log') ?? '[]')
-    localStorage.setItem('fetch_debug_log', JSON.stringify([...existing, {
-      fn: 'getDbCommunityPosts',
-      count: data?.length ?? 0,
-      error: error?.message ?? null,
-      at: new Date().toISOString(),
-    }].slice(-50)))
-  } catch {}
 
   if (error || !data) return []
 

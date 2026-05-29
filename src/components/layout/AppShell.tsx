@@ -1,15 +1,12 @@
 'use client'
-import { useState, useLayoutEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import BottomNav from './BottomNav'
 import Sidebar from './Sidebar'
 import Header from './Header'
-import SplashScreen from '@/components/feed/SplashScreen'
 import OnboardingModal from '@/components/ui/OnboardingModal'
 import { useAuth } from '@/context/AuthContext'
 
 const NO_NAV_PATHS = ['/login', '/signup']
-const FEED_PATH = '/feed'
 
 function isChatDetail(pathname: string) {
   return pathname.startsWith('/chat/') && pathname !== '/chat'
@@ -17,48 +14,33 @@ function isChatDetail(pathname: string) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [splashDone, setSplashDone] = useState<boolean>(false)
   const { showOnboarding, setShowOnboarding } = useAuth()
 
   const hideNav = NO_NAV_PATHS.some(p => pathname.startsWith(p)) || isChatDetail(pathname)
-  const isFeed = pathname === FEED_PATH || pathname === '/'
-
-  useLayoutEffect(() => {
-    setSplashDone(!!sessionStorage.getItem('familog_splash'))
-  }, [])
-
-  const handleSplashDone = () => {
-    sessionStorage.setItem('familog_splash', '1')
-    setSplashDone(true)
-  }
 
   return (
     <>
-      {!splashDone && <SplashScreen onDone={handleSplashDone} />}
+      {/* Desktop sidebar */}
+      {!hideNav && (
+        <div
+          className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:border-r lg:border-brand-line lg:bg-white"
+          style={{ zIndex: 20 }}
+        >
+          <Sidebar />
+        </div>
+      )}
 
-      <div className={`transition-opacity duration-300 ${splashDone ? 'opacity-100' : 'opacity-0'}`}>
-        {/* Desktop sidebar */}
+      {/* Main content */}
+      <div className={!hideNav ? 'lg:ml-64' : ''}>
+        {!hideNav && <Header />}
+        <main className={`${!hideNav ? 'pb-20 lg:pb-0 pt-14 lg:pt-0' : ''}`}>
+          {children}
+        </main>
         {!hideNav && (
-          <div
-            className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:border-r lg:border-brand-line lg:bg-white"
-            style={{ zIndex: 20 }}
-          >
-            <Sidebar />
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20 }}>
+            <BottomNav />
           </div>
         )}
-
-        {/* Main content */}
-        <div className={!hideNav ? 'lg:ml-64' : ''}>
-          {!hideNav && !isFeed && <Header />}
-          <main className={`${!hideNav && !isFeed ? 'pb-20 lg:pb-0 pt-14 lg:pt-0' : !hideNav ? 'pb-20 lg:pb-0' : ''}`}>
-            {children}
-          </main>
-          {!hideNav && (
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20 }}>
-              <BottomNav />
-            </div>
-          )}
-        </div>
       </div>
 
       {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}

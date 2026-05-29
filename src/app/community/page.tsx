@@ -1,11 +1,11 @@
 'use client'
-import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback, Suspense } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback, Fragment } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { communityPosts } from '@/data/community'
 import { feedPosts } from '@/data/feed'
 import type { CommunityPost, FeedPost } from '@/types/post'
-import { Heart, MessageSquare, PenSquare, Flame, Clock, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import { getDbCommunityPosts, getDbFeedPosts, getMyLikes, toggleLike } from '@/lib/api/posts'
 import { getEventPosts, type EventPost } from '@/lib/api/events'
 import { supabase } from '@/lib/supabase'
@@ -14,8 +14,8 @@ import PostMenu from '@/components/community/PostMenu'
 import ShareMenu from '@/components/community/ShareMenu'
 import CommentDrawer from '@/components/feed/CommentDrawer'
 
-const TABS = ['전체', '일상', '고민', '실천', '나눔'] as const
-type SortType = '인기순' | '최신순'
+const FEED_TABS = ['이야기', '우리 가족'] as const
+type FeedTab = typeof FEED_TABS[number]
 
 const CATEGORY_LABEL: Record<string, string> = {
   daily: '일상',
@@ -24,7 +24,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   sharing: '나눔',
 }
 
-// DB event_type → 한국어 뱃지 레이블 (행사 배너 카드용)
 const EVENT_TYPE_LABEL: Record<string, string> = {
   workshop: '워크숍',
   service:  '봉사',
@@ -38,7 +37,6 @@ function getCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category] ?? category
 }
 
-// start_at을 한국어 날짜 문자열로 포맷
 function formatEventDate(iso: string | null): string {
   if (!iso) return '미정'
   return new Date(iso).toLocaleDateString('ko-KR', {
@@ -62,7 +60,6 @@ interface CardPost {
   likes: number
   comments: number
   authorId?: string
-  // DB post_type 값 — CommentDrawer에 전달해 event 글 여부 판단에 사용
   postType?: string
 }
 
@@ -79,7 +76,6 @@ function feedToCard(p: FeedPost): CardPost {
     likes: p.likes,
     comments: p.comments,
     authorId: p.authorId,
-    // DB post_type 전달 — event 글 여부 판단에 사용
     postType: p.postType,
   }
 }
@@ -152,36 +148,13 @@ function PostPreview({
   )
 }
 
-function CommunityContent() {
-  useEffect(() => {
-    try {
-      const existing = JSON.parse(localStorage.getItem('mount_log') ?? '[]')
-      localStorage.setItem('mount_log', JSON.stringify([...existing, {
-        event: 'mounted',
-        pathname: window.location.pathname,
-        at: new Date().toISOString(),
-      }].slice(-50)))
-    } catch {}
-    return () => {
-      try {
-        const existing = JSON.parse(localStorage.getItem('mount_log') ?? '[]')
-        const authLog = JSON.parse(localStorage.getItem('auth_debug_log') ?? '[]')
-        const lastAuth = authLog.length > 0 ? authLog[authLog.length - 1] : null
-        localStorage.setItem('mount_log', JSON.stringify([...existing, {
-          event: 'unmounted',
-          pathname: window.location.pathname,
-          lastAuthEvent: lastAuth,
-          at: new Date().toISOString(),
-        }].slice(-50)))
-      } catch {}
-    }
-  }, [])
-
+export default function CommunityPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const { user, isLoading: authLoading } = useAuth()
-  const [tab, setTab] = useState<typeof TABS[number]>('전체')
-  const sort: SortType = searchParams.get('sort') === 'latest' ? '최신순' : '인기순'
+  const { user, isLoading } = useAuth()
+  const [feedTab, setFeedTab] = useState<FeedTab>('이야기')
+  const [familyMemberIds, setFamilyMemberIds] = useState<Set<string>>(new Set())
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [popularPosts, setPopularPosts] = useState<CardPost[]>([])
   const [latestPosts, setLatestPosts] = useState<CardPost[]>([])
   const [postsLoading, setPostsLoading] = useState(true)
@@ -193,9 +166,9 @@ function CommunityContent() {
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null)
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
 
-  // 실천 탭 상단 행사 배너 (post_type='event' 글, 최신 5개)
+  // 행사 배너 — 마운트 시 로딩, 모든 탭에서 5번째 게시글 아래 노출
   const [practiceEvents, setPracticeEvents] = useState<EventPost[]>([])
-  const [eventsLoading, setEventsLoading] = useState(false)
+  const [eventsLoading, setEventsLoading] = useState(true)
 
   // 행사 배너 가로 스크롤 — 마우스 드래그
   const eventBannerScrollRef = useRef<HTMLDivElement>(null)
@@ -219,7 +192,6 @@ function CommunityContent() {
     const drag = eventBannerDragRef.current
     if (!el || !drag.isDown) return
     const delta = e.pageX - drag.startX
-    // 5px 이하 이동은 클릭으로 간주
     if (Math.abs(delta) > 5) drag.dragged = true
     el.scrollLeft = drag.scrollLeft - delta
   }
@@ -227,7 +199,6 @@ function CommunityContent() {
   const handleEventBannerMouseEnd = () => {
     eventBannerDragRef.current.isDown = false
     setEventBannerDragging(false)
-    // click 처리 후 dragged 초기화 (다음 카드 클릭이 막히지 않도록)
     const wasDragged = eventBannerDragRef.current.dragged
     if (wasDragged) {
       window.setTimeout(() => {
@@ -236,7 +207,6 @@ function CommunityContent() {
     }
   }
 
-  // 드래그 후에는 Link 클릭(상세 이동) 차단
   const handleEventCardClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (eventBannerDragRef.current.dragged) {
       e.preventDefault()
@@ -244,54 +214,60 @@ function CommunityContent() {
   }
 
   useEffect(() => {
-    if (authLoading) return
+    if (isLoading) return
     setPostsLoading(true)
-    let popularCount = 0
-    let latestCount = 0
     Promise.all([getDbFeedPosts(), getDbCommunityPosts()])
       .then(([dbFeedPosts, dbCommunityPosts]) => {
         const dbFeedCards = dbFeedPosts.map(feedToCard)
         const mockFeedCards = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
         const popular = [...dbFeedCards, ...mockFeedCards]
         setPopularPosts(popular)
-        popularCount = popular.length
 
         const dbCommunityCards = dbCommunityPosts.map(communityToCard)
         const mockCommunityCards = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
         const latest = [...dbCommunityCards, ...mockCommunityCards]
         setLatestPosts(latest)
-        latestCount = latest.length
       })
       .catch(() => {
         const popular = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
         const latest = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
         setPopularPosts(popular)
         setLatestPosts(latest)
-        popularCount = popular.length
-        latestCount = latest.length
       })
-      .finally(() => {
-        setPostsLoading(false)
-        try {
-          localStorage.setItem('render_debug_log', JSON.stringify({
-            popularCount,
-            latestCount,
-            postsLoading: false,
-            timestamp: new Date().toISOString(),
-          }))
-        } catch {}
-      })
-  }, [authLoading])
+      .finally(() => setPostsLoading(false))
+  }, [isLoading])
 
-  // 실천 탭 선택 시 post_type='event' 행사 글 최신 5개 조회
+  // 행사 배너 — 마운트 시 1회 로딩 (탭 무관)
   useEffect(() => {
-    if (tab !== '실천') return
-    setEventsLoading(true)
     getEventPosts()
       .then(data => setPracticeEvents(data.slice(0, 5)))
       .catch(() => setPracticeEvents([]))
       .finally(() => setEventsLoading(false))
-  }, [tab])
+  }, [])
+
+  // 가족 구성원 ID 조회 — family_id 변경 시 갱신
+  useEffect(() => {
+    if (!user?.family_id) {
+      setFamilyMemberIds(new Set())
+      return
+    }
+    supabase
+      .from('users')
+      .select('id')
+      .eq('family_id', user.family_id)
+      .then(({ data }) => {
+        setFamilyMemberIds(new Set((data ?? []).map((u: { id: string }) => u.id)))
+      })
+  }, [user?.family_id])
+
+  // 토스트 타이머 언마운트 정리
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current) }, [])
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(msg)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2800)
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -349,8 +325,9 @@ function CommunityContent() {
 
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
-  const displayPosts = sort === '인기순' ? popularPosts : latestPosts
-  const filtered = tab === '전체' ? displayPosts : displayPosts.filter(p => p.category === tab)
+  const filtered = feedTab === '우리 가족'
+    ? popularPosts.filter(p => p.authorId != null && familyMemberIds.has(p.authorId))
+    : popularPosts
 
   const activePost = useMemo((): FeedPost | null => {
     if (!activeCommentPostId) return null
@@ -368,7 +345,6 @@ function CommunityContent() {
       likes: activeCardPost.likes,
       comments: activeCardPost.comments,
       category: activeCardPost.category,
-      // DB post_type 전달 — CommentDrawer에서 event 글 여부 판단에 사용
       postType: activeCardPost.postType,
     }
   }, [activeCommentPostId, popularPosts, latestPosts])
@@ -377,117 +353,94 @@ function CommunityContent() {
     setCommentCounts(prev => ({ ...prev, [postId]: count }))
   }, [])
 
+  // 5번째 게시글 아래 삽입할 행사 배너 (모든 탭에서 항상 노출)
+  const eventBannerNode = (eventsLoading || practiceEvents.length > 0) ? (
+    <div className="py-1">
+      {eventsLoading && (
+        <section>
+          <div className="h-5 bg-brand-card rounded w-36 mb-3 animate-pulse" />
+          <div className="flex flex-row gap-3 overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden -mx-4 px-4">
+            {[1, 2, 3, 4, 5].map(n => (
+              <div key={n} className="flex-shrink-0 w-72 bg-white rounded-2xl border border-brand-line p-4 animate-pulse h-40" />
+            ))}
+          </div>
+        </section>
+      )}
+      {!eventsLoading && practiceEvents.length > 0 && (
+        <section>
+          <h2 className="text-base font-bold mb-3 flex items-center gap-1.5 text-brand-text">
+            <Calendar size={17} className="text-brand-green" /> 참여할 수 있는 행사
+          </h2>
+          <div
+            ref={eventBannerScrollRef}
+            className={`flex flex-row gap-3 overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden -mx-4 px-4 pb-2 cursor-grab ${eventBannerDragging ? 'select-none cursor-grabbing' : ''}`}
+            onMouseDown={handleEventBannerMouseDown}
+            onMouseMove={handleEventBannerMouseMove}
+            onMouseUp={handleEventBannerMouseEnd}
+            onMouseLeave={handleEventBannerMouseEnd}
+          >
+            {practiceEvents.map(event => (
+              <Link
+                key={event.id}
+                href={`/events/${event.id}`}
+                draggable={false}
+                onClick={handleEventCardClick}
+                className="flex-shrink-0 w-72 bg-white rounded-2xl border border-brand-line p-4 flex flex-col hover:bg-brand-card transition-colors"
+              >
+                <span className="self-start text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green rounded-full font-medium mb-2">
+                  {EVENT_TYPE_LABEL[event.category ?? ''] ?? event.category ?? '행사'}
+                </span>
+                <h3 className="font-semibold text-base leading-snug line-clamp-2 mb-2">{event.title}</h3>
+                <p className="text-sm text-brand-sub line-clamp-3 mb-2">{event.content ?? ''}</p>
+                <div className="text-xs text-brand-muted space-y-0.5 mb-3">
+                  <div>{formatEventDate(event.event_start_at)}</div>
+                  {event.event_location && <div className="line-clamp-1">{event.event_location}</div>}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-brand-line/50">
+                  <span className="text-xs text-brand-muted">최대 {event.event_max_participants ?? '-'}명</span>
+                  {event.event_merit_reward > 0 && (
+                    <span className="text-xs font-medium text-brand-green flex-shrink-0">
+                      +{event.event_merit_reward}NP
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  ) : null
+
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-6">
-      {/* 상단 sticky 헤더 */}
+      {/* 상단 sticky 헤더 — 피드 탭 (X 스타일 언더라인) */}
       <div className="sticky top-14 lg:top-0 z-20 bg-brand-bg/95 backdrop-blur-sm border-b border-brand-line">
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide px-4 lg:px-6 py-3">
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === t ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'}`}>
+        <div className="flex">
+          {FEED_TABS.map(t => (
+            <button
+              key={t}
+              onClick={() => {
+                if (t === '우리 가족' && !user?.family_id) {
+                  showToast('가족을 연결하면 우리 가족 피드가 생겨요')
+                  return
+                }
+                setFeedTab(t)
+              }}
+              className={`flex-1 py-3 text-sm font-semibold text-center transition-colors border-b-2 ${
+                feedTab === t
+                  ? 'border-brand-green text-brand-text'
+                  : 'border-transparent text-brand-sub'
+              }`}
+            >
               {t}
             </button>
           ))}
         </div>
-        {/* 실천 탭이 아닐 때만 안내 문구 표시 */}
-        {tab !== '실천' && (
-          <div className="px-4 lg:px-6 pb-3">
-            <span className="text-sm text-brand-muted">가족의 성장을 함께 기록해요</span>
-          </div>
-        )}
       </div>
-
-      {/* 실천 탭 상단 — getEventPosts()로 불러온 행사 배너 (w-72 가로 스크롤) */}
-      {tab === '실천' && (
-        <div className="px-4 lg:px-6 pt-3 pb-3 border-b border-brand-line bg-brand-bg">
-            {eventsLoading && (
-              <section>
-                <div className="h-6 bg-brand-card rounded w-40 mb-3 animate-pulse" />
-                {/* 로딩 스켈레톤: 가로 스크롤 컨테이너 */}
-                <div className="flex flex-row gap-3 overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden -mx-4 px-4">
-                  {[1, 2, 3, 4, 5].map(n => (
-                    <div key={n} className="flex-shrink-0 w-72 bg-white rounded-2xl border border-brand-line p-4 animate-pulse h-40" />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {!eventsLoading && practiceEvents.length > 0 && (
-              <section>
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-1.5 text-brand-text">
-                  <Calendar size={18} className="text-brand-green" /> 참여할 수 있는 행사
-                </h2>
-                {/* 가로 스크롤 컨테이너 (드래그 스크롤 · 스크롤바 숨김) */}
-                <div
-                  ref={eventBannerScrollRef}
-                  className={`flex flex-row gap-3 overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden -mx-4 px-4 pb-2 cursor-grab ${eventBannerDragging ? 'select-none cursor-grabbing' : ''}`}
-                  onMouseDown={handleEventBannerMouseDown}
-                  onMouseMove={handleEventBannerMouseMove}
-                  onMouseUp={handleEventBannerMouseEnd}
-                  onMouseLeave={handleEventBannerMouseEnd}
-                >
-                  {practiceEvents.map(event => (
-                    <Link
-                      key={event.id}
-                      href={`/events/${event.id}`}
-                      draggable={false}
-                      onClick={handleEventCardClick}
-                      className="flex-shrink-0 w-72 bg-white rounded-2xl border border-brand-line p-4 flex flex-col hover:bg-brand-card transition-colors"
-                    >
-                      {/* 카테고리 뱃지 */}
-                      <span className="self-start text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green rounded-full font-medium mb-2">
-                        {EVENT_TYPE_LABEL[event.category ?? ''] ?? event.category ?? '행사'}
-                      </span>
-                      {/* 제목 */}
-                      <h3 className="font-semibold text-base leading-snug line-clamp-2 mb-2">{event.title}</h3>
-                      {/* 내용 요약 */}
-                      <p className="text-sm text-brand-sub line-clamp-3 mb-2">
-                        {event.content ?? ''}
-                      </p>
-                      {/* 날짜 · 장소 */}
-                      <div className="text-xs text-brand-muted space-y-0.5 mb-3">
-                        <div>{formatEventDate(event.event_start_at)}</div>
-                        {event.event_location && <div className="line-clamp-1">{event.event_location}</div>}
-                      </div>
-                      {/* 하단: 최대 인원 · 참여 포인트 */}
-                      <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-brand-line/50">
-                        <span className="text-xs text-brand-muted">
-                          최대 {event.event_max_participants ?? '-'}명
-                        </span>
-                        {event.event_merit_reward > 0 && (
-                          <span className="text-xs font-medium text-brand-green flex-shrink-0">
-                            +{event.event_merit_reward}NP
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-        </div>
-      )}
 
       {/* 카드 목록 */}
       <div className="px-4 lg:px-6 py-4 space-y-4">
-        {/* 정렬 토글 — 행사 배너 아래, 게시글 목록 바로 위 */}
-        <div className="flex justify-end">
-          <div className="flex items-center gap-0.5 bg-brand-card rounded-full p-0.5">
-            <button
-              onClick={() => router.replace('/community?sort=popular')}
-              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${sort === '인기순' ? 'bg-brand-text text-white' : 'text-brand-sub'}`}
-            >
-              <Flame size={11} />인기순
-            </button>
-            <button
-              onClick={() => router.replace('/community?sort=latest')}
-              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${sort === '최신순' ? 'bg-brand-text text-white' : 'text-brand-sub'}`}
-            >
-              <Clock size={11} />최신순
-            </button>
-          </div>
-        </div>
-
         {postsLoading ? (
           [1, 2, 3].map(n => (
             <div key={n} className="bg-white rounded-2xl border border-brand-line p-4 animate-pulse">
@@ -506,114 +459,128 @@ function CommunityContent() {
               </div>
             </div>
           ))
-        ) : filtered.map(post => {
-          const isExpanded = expandedIds.has(post.id)
+        ) : (
+          <>
+            {filtered.map((post, index) => {
+              const isExpanded = expandedIds.has(post.id)
+              return (
+                <Fragment key={post.id}>
+                  <div className="bg-white rounded-2xl border border-brand-line overflow-hidden">
 
-          return (
-            <div key={post.id} className="bg-white rounded-2xl border border-brand-line overflow-hidden">
-
-              {/* 구역 A: 텍스트 — 클릭 시 상세 이동 */}
-              <Link href={`/community/${post.id}`} className="block p-4 pb-3 hover:bg-gray-50/50 transition-colors">
-                {/* 작성자 행 */}
-                <div className="flex items-center gap-2 mb-3">
-                  <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{post.authorName}</div>
-                    <div className="text-xs text-brand-muted">{post.authorStatus}</div>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium flex-shrink-0">
-                    {post.category}
-                  </span>
-                  {user && (
-                    <PostMenu
-                      postId={post.id}
-                      authorId={post.authorId}
-                      isMock={!post.authorId}
-                      onDeleted={() => removePost(post.id)}
-                      className="flex-shrink-0"
-                    />
-                  )}
-                </div>
-
-                {/* 제목 */}
-                <h3 className="font-semibold text-base leading-snug mb-2">{post.title}</h3>
-
-                {/* 본문 미리보기 */}
-                <PostPreview
-                  text={post.preview}
-                  isExpanded={isExpanded}
-                  onToggle={(e) => toggleExpand(e, post.id)}
-                />
-              </Link>
-
-              {/* 구역 B: 사진 — 클릭 시 라이트박스 */}
-              {post.images.length === 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => openLightbox(e, post.images, 0)}
-                  className="w-full block"
-                >
-                  <div className="w-full aspect-video overflow-hidden">
-                    <img src={post.images[0]} alt="" className="w-full h-full object-cover" />
-                  </div>
-                </button>
-              )}
-              {post.images.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-3">
-                  {post.images.map((src, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={(e) => openLightbox(e, post.images, idx)}
-                      className="flex-shrink-0"
-                    >
-                      <div className="w-48 h-36 rounded-xl overflow-hidden">
-                        <img src={src} alt="" className="w-full h-full object-cover" />
+                    {/* 구역 A: 텍스트 — 클릭 시 상세 이동 */}
+                    <Link href={`/community/${post.id}`} className="block p-4 pb-3 hover:bg-gray-50/50 transition-colors">
+                      <div className="flex items-center gap-2 mb-3">
+                        <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{post.authorName}</div>
+                          <div className="text-xs text-brand-muted">{post.authorStatus}</div>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium flex-shrink-0">
+                          {post.category}
+                        </span>
+                        {user && (
+                          <PostMenu
+                            postId={post.id}
+                            authorId={post.authorId}
+                            isMock={!post.authorId}
+                            onDeleted={() => removePost(post.id)}
+                            className="flex-shrink-0"
+                          />
+                        )}
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
 
-              {/* 구역 C: 액션 — 각각 독립 */}
-              <div className="flex items-center gap-4 px-4 py-3 text-sm text-brand-muted border-t border-brand-line/50">
-                <button
-                  type="button"
-                  onClick={(e) => handleLike(e, post.id)}
-                  className={`flex items-center gap-1.5 transition-colors ${likedIds.has(post.id) ? 'text-red-500' : ''}`}
-                >
-                  <Heart size={16} fill={likedIds.has(post.id) ? 'currentColor' : 'none'} />
-                  {getLikeCount(post)}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setActiveCommentPostId(post.id)
-                  }}
-                  className="flex items-center gap-1.5 hover:text-brand-text transition-colors"
-                >
-                  <MessageSquare size={16} />{getCommentCount(post)}
-                </button>
-                <ShareMenu
-                  title={post.title}
-                  url={typeof window !== 'undefined' ? `${window.location.origin}/community/${post.id}` : `/community/${post.id}`}
-                  className="ml-auto -my-1"
-                />
-              </div>
-            </div>
-          )
-        })}
+                      <h3 className="font-semibold text-base leading-snug mb-2">{post.title}</h3>
+
+                      <PostPreview
+                        text={post.preview}
+                        isExpanded={isExpanded}
+                        onToggle={(e) => toggleExpand(e, post.id)}
+                      />
+                    </Link>
+
+                    {/* 구역 B: 사진 — 클릭 시 라이트박스 */}
+                    {post.images.length === 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => openLightbox(e, post.images, 0)}
+                        className="w-full block"
+                      >
+                        <div className="w-full aspect-video overflow-hidden">
+                          <img src={post.images[0]} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      </button>
+                    )}
+                    {post.images.length > 1 && (
+                      <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-3">
+                        {post.images.map((src, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={(e) => openLightbox(e, post.images, idx)}
+                            className="flex-shrink-0"
+                          >
+                            <div className="w-48 h-36 rounded-xl overflow-hidden">
+                              <img src={src} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 구역 C: 액션 */}
+                    <div className="flex items-center gap-4 px-4 py-3 text-sm text-brand-muted border-t border-brand-line/50">
+                      <button
+                        type="button"
+                        onClick={(e) => handleLike(e, post.id)}
+                        className={`flex items-center gap-1.5 transition-colors ${likedIds.has(post.id) ? 'text-red-500' : ''}`}
+                      >
+                        <Heart size={16} fill={likedIds.has(post.id) ? 'currentColor' : 'none'} />
+                        {getLikeCount(post)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setActiveCommentPostId(post.id)
+                        }}
+                        className="flex items-center gap-1.5 hover:text-brand-text transition-colors"
+                      >
+                        <MessageSquare size={16} />{getCommentCount(post)}
+                      </button>
+                      <ShareMenu
+                        title={post.title}
+                        url={typeof window !== 'undefined' ? `${window.location.origin}/community/${post.id}` : `/community/${post.id}`}
+                        className="ml-auto -my-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 5번째 게시글(index 4) 아래에 행사 배너 삽입 */}
+                  {index === 4 && eventBannerNode}
+                </Fragment>
+              )
+            })}
+
+            {/* 게시글이 5개 미만이면 목록 끝에 행사 배너 노출 */}
+            {filtered.length < 5 && eventBannerNode}
+          </>
+        )}
       </div>
 
-      {/* activePost.postType을 전달 — 'event'일 때 CommentDrawer에서 사진 첨부 버튼 노출 */}
       <CommentDrawer
         post={activePost}
         onClose={() => setActiveCommentPostId(null)}
         onCommentCountChange={handleCommentCountChange}
         postType={activePost?.postType}
       />
+
+      {/* 토스트 메시지 */}
+      {toast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-brand-text text-white text-sm px-4 py-2.5 rounded-full shadow-lg whitespace-nowrap pointer-events-none">
+          {toast}
+        </div>
+      )}
 
       {/* FAB 글쓰기 */}
       <Link href="/community/write" className="fixed right-4 bottom-24 lg:bottom-8 lg:right-8 z-30 w-14 h-14 bg-brand-green rounded-full shadow-xl flex items-center justify-center text-white">
@@ -626,7 +593,6 @@ function CommunityContent() {
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
           onClick={() => setLightbox(null)}
         >
-          {/* 닫기 버튼 */}
           <button
             type="button"
             onClick={() => setLightbox(null)}
@@ -635,7 +601,6 @@ function CommunityContent() {
             <X size={28} />
           </button>
 
-          {/* 이미지 */}
           <img
             src={lightbox.images[lightbox.index]}
             alt=""
@@ -643,7 +608,6 @@ function CommunityContent() {
             onClick={e => e.stopPropagation()}
           />
 
-          {/* 여러 장일 때 좌/우 화살표 */}
           {lightbox.images.length > 1 && (
             <>
               <button
@@ -670,13 +634,5 @@ function CommunityContent() {
         </div>
       )}
     </div>
-  )
-}
-
-export default function CommunityPage() {
-  return (
-    <Suspense>
-      <CommunityContent />
-    </Suspense>
   )
 }

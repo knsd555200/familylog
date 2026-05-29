@@ -6,16 +6,6 @@ import { createPost } from '@/lib/api/posts'
 import { uploadImages } from '@/lib/upload'
 import { useAuth } from '@/context/AuthContext'
 
-const CATEGORIES = ['일상', '고민', '실천', '나눔'] as const
-type Category = typeof CATEGORIES[number]
-
-const CATEGORY_MAP: Record<Category, string> = {
-  '일상': 'daily',
-  '고민': 'concern',
-  '실천': 'practice',
-  '나눔': 'sharing',
-}
-
 const MAX_IMAGES = 3
 
 // 공통 텍스트 input / number input 스타일
@@ -36,7 +26,6 @@ export default function CommunityWritePage() {
   // ── 공통 필드 ─────────────────────────────────────────────────────────────
   const [title,      setTitle]      = useState('')
   const [content,    setContent]    = useState('')
-  const [category,   setCategory]   = useState<Category>('일상')
   const [visibility, setVisibility] = useState<'public' | 'members'>('members')
   const [imageFiles,    setImageFiles]    = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
@@ -133,7 +122,7 @@ export default function CommunityWritePage() {
               post_type:    'community',
               title:        title.trim(),
               content:      content.trim(),
-              category:     CATEGORY_MAP[category],
+              category:     'daily',
               visibility,
               media_urls,
               thumbnail_url: media_urls[0] ?? undefined,
@@ -197,26 +186,6 @@ export default function CommunityWritePage() {
                 <Calendar size={12} />
                 행사 글
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── 카테고리 (행사 글이면 숨김 — 'practice'로 자동 고정) ─────── */}
-        {!isEvent && (
-          <div>
-            <label className="text-xs text-brand-sub mb-2 block">카테고리</label>
-            <div className="flex gap-2 flex-wrap">
-              {CATEGORIES.map(c => (
-                <button
-                  key={c}
-                  onClick={() => setCategory(c)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    category === c ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
             </div>
           </div>
         )}

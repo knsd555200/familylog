@@ -14,7 +14,7 @@ const TITLES: Record<string, string> = {
 export default function Header() {
   const pathname = usePathname()
   const router = useRouter()
-  const { isLoggedIn } = useAuth()
+  const { isLoggedIn, user } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
@@ -28,6 +28,10 @@ export default function Header() {
   const isDetail = pathname.split('/').length > 2
   const basePath = '/' + pathname.split('/')[1]
   const title = TITLES[pathname] || TITLES[basePath] || ''
+
+  const showPoints = user != null && (
+    pathname === '/mypage' || pathname.startsWith('/mypage/') || pathname === '/benefits'
+  )
 
   return (
     <header className="fixed top-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-sm border-b border-brand-line lg:hidden h-14">
@@ -44,14 +48,21 @@ export default function Header() {
             </Link>
           )}
         </div>
-        <Link href="/notifications" className="relative p-2 text-brand-sub">
-          <Bell size={22} />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-              {unreadCount >= 10 ? '9+' : unreadCount}
+        <div className="flex items-center gap-1">
+          {showPoints && (
+            <span className="text-xs font-semibold text-brand-green">
+              {user!.points.toLocaleString()}NP
             </span>
           )}
-        </Link>
+          <Link href="/notifications" className="relative p-2 text-brand-sub">
+            <Bell size={22} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                {unreadCount >= 10 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
+        </div>
       </div>
     </header>
   )

@@ -7,11 +7,10 @@ import { supabase } from '@/lib/supabase'
 import { ChevronLeft, Check } from 'lucide-react'
 
 const STATUSES = [
-  { id: 'single', label: '미혼', icon: '👤', desc: '아직 결혼 전이에요' },
-  { id: 'dating', label: '연애 중', icon: '💕', desc: '소중한 사람과 만나고 있어요' },
-  { id: 'engaged', label: '결혼 준비', icon: '💍', desc: '곧 결혼해요' },
-  { id: 'newlywed', label: '신혼', icon: '🏠', desc: '결혼 5년차 이하' },
-  { id: 'family', label: '가족', icon: '👨‍👩‍👧', desc: '결혼 5년차 이상' },
+  { id: 'pre_married', label: '예비부부', icon: '💍', desc: '결혼을 앞두고 있어요' },
+  { id: 'newlywed',    label: '신혼부부', icon: '🏠', desc: '결혼 5년차 이하' },
+  { id: 'parenting',   label: '부모',     icon: '👨‍👩‍👧', desc: '자녀와 함께하고 있어요' },
+  { id: 'empty_nest',  label: '황혼부부',  icon: '🕊️', desc: '자녀가 독립했어요' },
 ] as const
 
 const INTERESTS = ['부부 관계', '자녀 양육', '일상 기록', '가정 문화', '봉사·기여', '커뮤니티'] as const
@@ -35,7 +34,7 @@ export default function SignupPage() {
         await supabase.from('users').upsert({
           id: user.id,
           nickname: nickname.trim(),
-          bio: status,
+          life_stage: status,
         })
       }
       router.push('/feed')

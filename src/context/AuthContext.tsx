@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 
+type AuthStatus = 'initializing' | 'authenticated' | 'unauthenticated'
+
 interface User {
   id: string
   nickname: string
@@ -13,6 +15,9 @@ interface User {
   tier: string
   bio: string
   role: string
+  family_id: string | null
+  created_at: string | null
+  life_stage: string | null
 }
 
 interface AuthContextType {
@@ -20,10 +25,12 @@ interface AuthContextType {
   loginWithKakao: () => void
   logout: () => void
   isLoggedIn: boolean
-  // 세션 초기화가 완료되기 전까지 true (로그인 상태 확인 전 깜박임 방지용)
+  // 소비 컴포넌트 호환 유지 — status === 'initializing' 파생값
   isLoading: boolean
+  status: AuthStatus
   showOnboarding: boolean
   setShowOnboarding: (v: boolean) => void
+  updateUser: (partial: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -32,11 +39,13 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
   isLoggedIn: false,
   isLoading: true,
+  status: 'initializing',
   showOnboarding: false,
   setShowOnboarding: () => {},
+  updateUser: () => {},
 })
 
-async function buildUser(authUser: { id: string; email?: string; user_metadata?: Record<string, string> }): Promise<User> {
+async function buildUser(authUser: { id: string; email?: string; user_metadata?: Record<string, string> }, accessToken: string): Promise<User> {
   const fallback: User = {
     id: authUser.id,
     nickname: authUser.user_metadata?.nickname || '새 멤버',
@@ -48,103 +57,121 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
     tier: '',
     bio: '',
     role: '',
+    family_id: null,
+    created_at: null,
+    life_stage: null,
   }
 
-  const { data } = await supabase
-    .from('users')
-    .select('id, nickname, avatar_url, bio, role, tier, merit_total')
-    .eq('id', authUser.id)
-    .maybeSingle()
-
-  if (!data) return fallback
-
-  return {
-    ...fallback,
-    nickname: data.nickname || fallback.nickname,
-    avatar: data.avatar_url || fallback.avatar,
-    points: data.merit_total ?? 0,
-    status: data.bio || '',
-    tier: data.tier || '',
-    bio: data.bio || '',
-    role: data.role || '',
-  }
-}
-
-function logAuth(event: string, uid: string | null, message: string) {
   try {
-    const existing = JSON.parse(localStorage.getItem('auth_debug_log') ?? '[]')
-    const next = [...existing, {
-      event,
-      uid,
-      message,
-      pathname: window.location.pathname,
-      at: new Date().toISOString(),
-    }]
-    localStorage.setItem('auth_debug_log', JSON.stringify(next.slice(-50)))
-  } catch {}
+    const dbUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=id,nickname,avatar_url,bio,role,tier,merit_total,family_id,created_at,life_stage&limit=1`
+    const dbRes = await fetch(dbUrl, {
+      headers: {
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    })
+    const dbArr = dbRes.ok ? await dbRes.json() : []
+    const data = Array.isArray(dbArr) && dbArr.length > 0 ? dbArr[0] : null
+
+    if (!data) return fallback
+
+    return {
+      ...fallback,
+      nickname: data.nickname || fallback.nickname,
+      avatar: data.avatar_url || fallback.avatar,
+      points: data.merit_total ?? 0,
+      status: data.bio || '',
+      tier: data.tier || '',
+      bio: data.bio || '',
+      role: data.role || '',
+      family_id: data.family_id ?? null,
+      created_at: data.created_at ?? null,
+      life_stage: data.life_stage ?? null,
+    }
+  } catch {
+    return fallback
+  }
 }
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [status, setStatus] = useState<AuthStatus>('initializing')
   // onAuthStateChange 클로저에서 최신 uid를 읽기 위한 ref (state는 클로저에서 stale하게 읽힘)
   const currentUidRef = useRef<string | null>(null)
-  // 세션 확인이 완료되기 전까지 true — 이 값이 true인 동안 UI를 숨겨 깜박임 방지
-  const [isLoading, setIsLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
 
+  const isLoading = status === 'initializing'
 
   useEffect(() => {
-    // INITIAL_SESSION이 3초 내 발생하지 않으면 강제로 isLoading 해제 (방어적 처리)
-    const loadingTimeout = setTimeout(() => setIsLoading(false), 3000)
+    let mounted = true
+
+    // 초기 세션을 직접 조회 — INITIAL_SESSION 이벤트 의존 제거
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return
+
+      if (session?.user) {
+        currentUidRef.current = session.user.id
+        try {
+          const built = await buildUser(session.user, session.access_token)
+          if (!mounted) return
+          setUser(built)
+          setStatus('authenticated')
+        } catch {
+          if (!mounted) return
+          currentUidRef.current = null
+          setUser(null)
+          setStatus('unauthenticated')
+        }
+      } else {
+        setStatus('unauthenticated')
+      }
+    }).catch(() => {
+      if (mounted) setStatus('unauthenticated')
+    })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const sessionDesc = session ? `uid=${session.user.id} expires=${session.expires_at}` : 'null'
-      logAuth(event, session?.user.id ?? null, `onAuthStateChange: ${event} / session: ${sessionDesc}`)
+      // 초기 세션은 getSession()으로 처리했으므로 무시
+      if (event === 'INITIAL_SESSION') return
 
       // 토큰 갱신은 이미 로그인된 상태이므로 사용자 재조회 불필요
       if (event === 'TOKEN_REFRESHED') return
 
-      if (event === 'SIGNED_OUT') {
-        logAuth('SIGNED_OUT', null, 'SIGNED_OUT 발생 — 원인 후보: refresh token 만료·무효화, 다른 탭 로그아웃, 서버 세션 삭제')
-      }
-
       if (session?.user) {
         // 이미 같은 uid로 로그인된 상태면 SIGNED_IN 재처리 불필요
-        if (event === 'SIGNED_IN' && currentUidRef.current === session.user.id) {
-          logAuth('SIGNED_IN_SKIPPED', session.user.id, '이미 동일 uid로 로그인 상태')
-        } else {
-          currentUidRef.current = session.user.id
-          try {
-            const built = await buildUser(session.user)
-            setUser(built)
-          } catch (err) {
-            logAuth('BUILD_USER_ERROR', session.user.id, `buildUser 실패: ${err instanceof Error ? err.message : String(err)}`)
-            currentUidRef.current = null
-            setUser(null)
-          }
-          // 온보딩은 명시적 로그인 시에만 표시 (초기 세션 복원 시에는 표시하지 않음)
-          if (event === 'SIGNED_IN') {
-            const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
-            const shouldHide = hideUntil && Date.now() < Number(hideUntil)
-            if (!shouldHide && window.location.pathname !== '/signup') {
-              setShowOnboarding(true)
-            }
+        if (event === 'SIGNED_IN' && currentUidRef.current === session.user.id) return
+        currentUidRef.current = session.user.id
+        try {
+          const built = await buildUser(session.user, session.access_token)
+          if (!mounted) return
+          setUser(built)
+          setStatus('authenticated')
+        } catch {
+          if (!mounted) return
+          currentUidRef.current = null
+          setUser(null)
+          setStatus('unauthenticated')
+        }
+        // 온보딩은 명시적 로그인 시에만 표시 (초기 세션 복원 시에는 표시하지 않음)
+        if (event === 'SIGNED_IN' && mounted) {
+          const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
+          const shouldHide = hideUntil && Date.now() < Number(hideUntil)
+          if (!shouldHide && window.location.pathname !== '/signup') {
+            setShowOnboarding(true)
           }
         }
       } else {
+        if (!mounted) return
         currentUidRef.current = null
         setUser(null)
-      }
-
-      // INITIAL_SESSION은 마운트 시 정확히 한 번 발생 — 세션 확인 완료 시점
-      if (event === 'INITIAL_SESSION') {
-        clearTimeout(loadingTimeout)
-        setIsLoading(false)
+        setStatus('unauthenticated')
       }
     })
 
     return () => {
-      clearTimeout(loadingTimeout)
+      mounted = false
       subscription.unsubscribe()
     }
   }, [])
@@ -164,8 +191,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  const updateUser = (partial: Partial<User>) => {
+    setUser(prev => prev ? { ...prev, ...partial } : prev)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loginWithKakao, logout, isLoggedIn: !!user, isLoading, showOnboarding, setShowOnboarding }}>
+    <AuthContext.Provider value={{ user, loginWithKakao, logout, isLoggedIn: !!user, isLoading, status, showOnboarding, setShowOnboarding, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

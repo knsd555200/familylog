@@ -1,14 +1,13 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, MessageSquare, ShoppingBag, User, Bell, LogOut, LogIn } from 'lucide-react'
+import { Home, Target, User, Bell, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 const tabs = [
-  { href: '/home', label: '홈', icon: Home },
-  { href: '/community', label: '커뮤니티', icon: MessageSquare },
-  { href: '/store', label: '스토어', icon: ShoppingBag },
-  { href: '/my', label: '마이', icon: User },
+  { href: '/community', label: '홈', icon: Home },
+  { href: '/benefits', label: '미션', icon: Target },
+  { href: '/mypage', label: '마이', icon: User },
 ]
 
 export default function Sidebar() {
@@ -23,7 +22,7 @@ export default function Sidebar() {
       </Link>
       <nav className="flex-1 space-y-1">
         {tabs.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || (href !== '/home' && pathname.startsWith(href) && href !== '/community') || (href === '/community' && (pathname === '/' || pathname === '/community'))
+          const active = pathname === href || pathname.startsWith(href + '/')
           return (
             <Link key={href} href={href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${active ? 'bg-brand-green-light text-brand-green-dark' : 'text-brand-sub hover:bg-brand-card'}`}>
