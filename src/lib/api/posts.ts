@@ -88,6 +88,7 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
     .select('*, users(nickname, avatar_url, bio, role, tier)')
     // members 글도 피드에 포함 — FeedCard에서 비로그인 시 블러·잠금 처리
     .in('visibility', ['public', 'members'])
+    .neq('post_type', 'event')
     .is('deleted_at', null)
     .order('is_pinned', { ascending: false })
     .limit(100)
@@ -156,7 +157,7 @@ export async function createPost(params: {
   title: string
   content: string
   category: string
-  visibility: 'public' | 'members'
+  visibility: 'public' | 'members' | 'private'
   media_urls?: string[]
   thumbnail_url?: string
   // 행사 글 전용 필드 (post_type='event'일 때만 사용)
@@ -166,6 +167,8 @@ export async function createPost(params: {
   event_max_participants?: number | null
   event_merit_reward?: number
   event_is_closed?: boolean
+  // 인증 게시물 전용 — 행사 참여 인증 시 지급할 포인트
+  verify_merit_reward?: number
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user ?? null
@@ -205,16 +208,33 @@ export async function createPost(params: {
 
   if (error) return { success: false, error: error.message }
 
-  // 게시글 작성 포인트 적립 (하루 1회 제한은 addMerit 내부에서 처리)
-  await addMerit({
-    userId: user.id,
-    meritType: 'post_created',
-    points: 10,
-    category: 'activity',
-    referenceType: 'post',
-    referenceId: data.id,
-    note: '게시글 작성',
-  })
+  // 게시글 작성 포인트 적립 — 공개범위별 차등 (하루 1회 제한은 addMerit 내부에서 처리)
+  const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, members: 5, private: 0 }
+  const postPoints = POST_VISIBILITY_POINTS[params.visibility] ?? 10
+  if (postPoints > 0) {
+    await addMerit({
+      userId: user.id,
+      meritType: 'post_created',
+      points: postPoints,
+      category: 'activity',
+      referenceType: 'post',
+      referenceId: data.id,
+      note: '게시글 작성',
+    })
+  }
+
+  // 행사 인증 게시물 포인트 적립
+  if (params.category === 'practice' && params.verify_merit_reward) {
+    await addMerit({
+      userId:        user.id,
+      meritType:     'event_joined',
+      points:        params.verify_merit_reward,
+      category:      'events',
+      referenceType: 'post',
+      referenceId:   data.id,
+      note:          '행사 참여 인증',
+    })
+  }
 
   return { success: true, id: data.id }
 }
@@ -229,7 +249,7 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
 
   const { data: post, error: fetchError } = await supabase
     .from('posts')
-    .select('author_id')
+    .select('author_id, created_at, visibility')
     .eq('id', postId)
     .is('deleted_at', null)
     .maybeSingle()
@@ -253,16 +273,23 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
 
   if (error) return { success: false, error: error.message }
 
-  // 게시글 삭제 포인트 차감 (작성자 기준)
-  await addMerit({
-    userId: post.author_id,
-    meritType: 'post_deleted',
-    points: -10,
-    category: 'activity',
-    referenceType: 'post',
-    referenceId: postId,
-    note: '게시글 삭제',
-  })
+  // 작성자 본인 삭제 + 작성 24시간 이내일 때만 포인트 회수
+  const ageMs = Date.now() - new Date(post.created_at).getTime()
+  if (isAuthor && ageMs < 24 * 60 * 60 * 1000) {
+    const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, members: 5, private: 0 }
+    const revokePoints = POST_VISIBILITY_POINTS[post.visibility] ?? 10
+    if (revokePoints > 0) {
+      await addMerit({
+        userId: post.author_id,
+        meritType: 'post_deleted',
+        points: -revokePoints,
+        category: 'activity',
+        referenceType: 'post',
+        referenceId: postId,
+        note: '게시글 삭제',
+      })
+    }
+  }
 
   return { success: true }
 }
@@ -274,7 +301,7 @@ export async function updatePost(
     title: string
     content: string
     category: string
-    visibility: 'public' | 'members'
+    visibility: 'public' | 'members' | 'private'
     media_urls?: string[]
     thumbnail_url?: string | null
   }
@@ -341,7 +368,7 @@ export async function toggleLike(postId: string): Promise<{ liked: boolean; erro
 
   const { data: existing } = await supabase
     .from('likes')
-    .select('id')
+    .select('id, created_at')
     .eq('user_id', user.id)
     .eq('target_type', 'post')
     .eq('target_id', postId)
@@ -351,23 +378,26 @@ export async function toggleLike(postId: string): Promise<{ liked: boolean; erro
     const { error: deleteError } = await supabase.from('likes').delete().eq('id', existing.id)
     if (deleteError) return { liked: true, error: deleteError.message }
 
-    // 공감 취소 포인트 차감 (글 작성자 기준, 자기 글 공감 취소는 제외)
-    const { data: post } = await supabase
-      .from('posts')
-      .select('author_id')
-      .eq('id', postId)
-      .maybeSingle()
+    // 공감 취소 포인트 회수 — 자기 글 제외, 24시간 이내 공감만
+    const likeAgeMs = Date.now() - new Date(existing.created_at).getTime()
+    if (likeAgeMs < 24 * 60 * 60 * 1000) {
+      const { data: post } = await supabase
+        .from('posts')
+        .select('author_id')
+        .eq('id', postId)
+        .maybeSingle()
 
-    if (post && post.author_id !== user.id) {
-      await addMerit({
-        userId: post.author_id,
-        meritType: 'like_removed',
-        points: -2,
-        category: 'activity',
-        referenceType: 'post',
-        referenceId: postId,
-        note: '공감 취소',
-      })
+      if (post && post.author_id !== user.id) {
+        await addMerit({
+          userId: post.author_id,
+          meritType: 'like_removed',
+          points: -2,
+          category: 'activity',
+          referenceType: 'post',
+          referenceId: postId,
+          note: '공감 취소',
+        })
+      }
     }
 
     return { liked: false }
@@ -461,16 +491,19 @@ export async function createComment(params: {
 
   if (error) return { success: false, error: error.message }
 
-  // 댓글 작성 포인트 적립 (하루 3회 제한은 addMerit 내부에서 처리)
-  await addMerit({
-    userId: user.id,
-    meritType: 'comment_created',
-    points: 5,
-    category: 'activity',
-    referenceType: 'comment',
-    referenceId: data.id,
-    note: '댓글 작성',
-  })
+  // 댓글 작성 포인트 적립 — 자기 글 댓글 제외, 하루 3회 제한은 addMerit 내부에서 처리
+  const { data: parentPost } = await supabase.from('posts').select('author_id').eq('id', params.post_id).maybeSingle()
+  if (!parentPost || parentPost.author_id !== user.id) {
+    await addMerit({
+      userId: user.id,
+      meritType: 'comment_created',
+      points: 5,
+      category: 'activity',
+      referenceType: 'comment',
+      referenceId: data.id,
+      note: '댓글 작성',
+    })
+  }
 
   return { success: true }
 }
@@ -482,7 +515,7 @@ export async function deleteComment(commentId: string): Promise<{ success: boole
 
   const { data: comment, error: fetchError } = await supabase
     .from('comments')
-    .select('author_id')
+    .select('author_id, created_at')
     .eq('id', commentId)
     .is('deleted_at', null)
     .maybeSingle()
@@ -498,16 +531,19 @@ export async function deleteComment(commentId: string): Promise<{ success: boole
 
   if (error) return { success: false, error: error.message }
 
-  // 댓글 삭제 포인트 차감 (작성자 기준)
-  await addMerit({
-    userId: comment.author_id,
-    meritType: 'comment_deleted',
-    points: -5,
-    category: 'activity',
-    referenceType: 'comment',
-    referenceId: commentId,
-    note: '댓글 삭제',
-  })
+  // 작성 24시간 이내일 때만 포인트 회수
+  const ageMs = Date.now() - new Date(comment.created_at).getTime()
+  if (ageMs < 24 * 60 * 60 * 1000) {
+    await addMerit({
+      userId: comment.author_id,
+      meritType: 'comment_deleted',
+      points: -5,
+      category: 'activity',
+      referenceType: 'comment',
+      referenceId: commentId,
+      note: '댓글 삭제',
+    })
+  }
 
   return { success: true }
 }

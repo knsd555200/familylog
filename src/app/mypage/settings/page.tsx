@@ -1,13 +1,16 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ChevronRight, Pencil, Globe, Bell, Lock, BookOpen, MessageSquare, LogOut } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Pencil, Globe, Bell, Lock, BookOpen, MessageSquare, LogOut, Receipt } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
+import { VisibilitySheet } from '@/components/VisibilitySheet'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { logout } = useAuth()
+  const { user, logout, updateUser } = useAuth()
   const [toast, setToast] = useState<string | null>(null)
+  const [showVisibility, setShowVisibility] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
@@ -19,6 +22,29 @@ export default function SettingsPage() {
   }
 
   const stub = () => showToast('준비 중이에요')
+
+  const handleVisibilityChange = async (v: string) => {
+    if (!user || v === user.visibility) return
+    const prev = user.visibility
+    updateUser({ visibility: v })
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { updateUser({ visibility: prev }); return }
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`, {
+        method: 'PATCH',
+        headers: {
+          apikey:         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          Authorization:  `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          Prefer:         'return=minimal',
+        },
+        body: JSON.stringify({ visibility: v }),
+      })
+      if (!res.ok) updateUser({ visibility: prev })
+    } catch {
+      updateUser({ visibility: prev })
+    }
+  }
 
   const handleLogout = () => {
     logout()
@@ -46,7 +72,7 @@ export default function SettingsPage() {
               <span className="flex-1 text-sm text-brand-text text-left">프로필 수정</span>
               <ChevronRight size={16} className="text-brand-muted" />
             </button>
-            <button onClick={stub}
+            <button onClick={() => setShowVisibility(true)}
               className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-brand-card transition-colors">
               <Globe size={17} className="text-brand-sub flex-shrink-0" />
               <span className="flex-1 text-sm text-brand-text text-left">공개 범위 설정</span>
@@ -62,6 +88,19 @@ export default function SettingsPage() {
               className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-brand-card transition-colors">
               <Lock size={17} className="text-brand-sub flex-shrink-0" />
               <span className="flex-1 text-sm text-brand-text text-left">개인정보 관리</span>
+              <ChevronRight size={16} className="text-brand-muted" />
+            </button>
+          </div>
+        </section>
+
+        {/* 활동 섹션 */}
+        <section>
+          <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-2 px-1">활동</h2>
+          <div className="bg-white rounded-2xl border border-brand-line divide-y divide-brand-line overflow-hidden">
+            <button onClick={() => router.push('/mypage/points')}
+              className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-brand-card transition-colors">
+              <Receipt size={17} className="text-brand-sub flex-shrink-0" />
+              <span className="flex-1 text-sm text-brand-text text-left">활동·포인트 기록</span>
               <ChevronRight size={16} className="text-brand-muted" />
             </button>
           </div>
@@ -104,6 +143,15 @@ export default function SettingsPage() {
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-brand-text text-white text-sm px-4 py-2.5 rounded-full shadow-lg whitespace-nowrap pointer-events-none">
           {toast}
         </div>
+      )}
+
+      {/* 공개 범위 시트 */}
+      {showVisibility && user && (
+        <VisibilitySheet
+          current={user.visibility}
+          onSelect={handleVisibilityChange}
+          onClose={() => setShowVisibility(false)}
+        />
       )}
     </div>
   )

@@ -14,13 +14,66 @@ import PostMenu from '@/components/community/PostMenu'
 import ShareMenu from '@/components/community/ShareMenu'
 import CommentDrawer from '@/components/feed/CommentDrawer'
 
+function useDragScroll() {
+  const ref = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+  const startX = useRef(0)
+  const scrollLeft = useRef(0)
+  const moved = useRef(false)
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragging.current = true
+    moved.current = false
+    startX.current = e.pageX - (ref.current?.offsetLeft ?? 0)
+    scrollLeft.current = ref.current?.scrollLeft ?? 0
+  }
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging.current || !ref.current) return
+    const x = e.pageX - ref.current.offsetLeft
+    const delta = x - startX.current
+    if (Math.abs(delta) > 3) moved.current = true
+    ref.current.scrollLeft = scrollLeft.current - delta
+  }
+  const onMouseUp = () => { dragging.current = false }
+  const wasDragging = () => moved.current
+
+  return { ref, onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp, wasDragging }
+}
+
+function ImageStrip({ images, onOpen }: { images: string[]; onOpen: (e: React.MouseEvent, idx: number) => void }) {
+  const { ref, onMouseDown, onMouseMove, onMouseUp, onMouseLeave, wasDragging } = useDragScroll()
+  return (
+    <div
+      ref={ref}
+      className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-3 cursor-grab active:cursor-grabbing select-none"
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
+    >
+      {images.map((src, idx) => (
+        <button
+          key={idx}
+          type="button"
+          onClick={(e) => { if (!wasDragging()) onOpen(e, idx) }}
+          className="flex-shrink-0"
+        >
+          <div className="w-48 h-36 rounded-xl overflow-hidden pointer-events-none">
+            <img src={src} alt="" className="w-full h-full object-cover" />
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const FEED_TABS = ['이야기', '우리 가족'] as const
 type FeedTab = typeof FEED_TABS[number]
 
 const CATEGORY_LABEL: Record<string, string> = {
   daily: '일상',
   concern: '고민',
-  practice: '실천',
+  practice: '인증',
   sharing: '나눔',
 }
 
@@ -163,6 +216,9 @@ export default function CommunityPage() {
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [lightbox, setLightbox] = useState<Lightbox | null>(null)
+  const lbTouchStartX = useRef<number | null>(null)
+  const lbMouseStartX = useRef<number | null>(null)
+  const lbMouseMoved  = useRef(false)
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null)
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
 
@@ -323,6 +379,18 @@ export default function CommunityPage() {
     setLightbox({ images, index })
   }
 
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft')  setLightbox(prev => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)
+      if (e.key === 'ArrowRight') setLightbox(prev => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)
+      if (e.key === 'Escape') setLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
+
+
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
   const filtered = feedTab === '우리 가족'
@@ -465,7 +533,7 @@ export default function CommunityPage() {
               const isExpanded = expandedIds.has(post.id)
               return (
                 <Fragment key={post.id}>
-                  <div className="bg-white rounded-2xl border border-brand-line overflow-hidden">
+                  <div className="bg-white rounded-2xl border border-brand-line overflow-x-hidden">
 
                     {/* 구역 A: 텍스트 — 클릭 시 상세 이동 */}
                     <Link href={`/community/${post.id}`} className="block p-4 pb-3 hover:bg-gray-50/50 transition-colors">
@@ -475,9 +543,11 @@ export default function CommunityPage() {
                           <div className="text-sm font-medium truncate">{post.authorName}</div>
                           <div className="text-xs text-brand-muted">{post.authorStatus}</div>
                         </div>
-                        <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium flex-shrink-0">
-                          {post.category}
-                        </span>
+                        {post.category === '인증' && (
+                          <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium flex-shrink-0">
+                            인증
+                          </span>
+                        )}
                         {user && (
                           <PostMenu
                             postId={post.id}
@@ -500,31 +570,23 @@ export default function CommunityPage() {
 
                     {/* 구역 B: 사진 — 클릭 시 라이트박스 */}
                     {post.images.length === 1 && (
-                      <button
-                        type="button"
-                        onClick={(e) => openLightbox(e, post.images, 0)}
-                        className="w-full block"
-                      >
-                        <div className="w-full aspect-video overflow-hidden">
-                          <img src={post.images[0]} alt="" className="w-full h-full object-cover" />
-                        </div>
-                      </button>
+                      <div className="px-4 pb-3">
+                        <button
+                          type="button"
+                          onClick={(e) => openLightbox(e, post.images, 0)}
+                          className="block"
+                        >
+                          <div className="w-64 h-48 rounded-xl overflow-hidden">
+                            <img src={post.images[0]} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        </button>
+                      </div>
                     )}
                     {post.images.length > 1 && (
-                      <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-3">
-                        {post.images.map((src, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={(e) => openLightbox(e, post.images, idx)}
-                            className="flex-shrink-0"
-                          >
-                            <div className="w-48 h-36 rounded-xl overflow-hidden">
-                              <img src={src} alt="" className="w-full h-full object-cover" />
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+                      <ImageStrip
+                        images={post.images}
+                        onOpen={(e, idx) => openLightbox(e, post.images, idx)}
+                      />
                     )}
 
                     {/* 구역 C: 액션 */}
@@ -590,49 +652,89 @@ export default function CommunityPage() {
       {/* 라이트박스 */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-          onClick={() => setLightbox(null)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center cursor-grab active:cursor-grabbing"
+          onClick={() => { if (!lbMouseMoved.current) setLightbox(null) }}
+          onMouseDown={e => { lbMouseStartX.current = e.clientX; lbMouseMoved.current = false }}
+          onMouseMove={e => { if (lbMouseStartX.current !== null && Math.abs(e.clientX - lbMouseStartX.current) > 5) lbMouseMoved.current = true }}
+          onMouseUp={e => {
+            if (lbMouseStartX.current === null) return
+            const dx = e.clientX - lbMouseStartX.current
+            lbMouseStartX.current = null
+            if (dx > 50) setLightbox(prev => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)
+            if (dx < -50) setLightbox(prev => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)
+          }}
+          onMouseLeave={() => { lbMouseStartX.current = null }}
+          onTouchStart={e => { lbTouchStartX.current = e.touches[0].clientX }}
+          onTouchEnd={e => {
+            if (lbTouchStartX.current === null) return
+            const dx = e.changedTouches[0].clientX - lbTouchStartX.current
+            lbTouchStartX.current = null
+            if (dx > 50) setLightbox(prev => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)
+            if (dx < -50) setLightbox(prev => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)
+          }}
         >
+          {/* 닫기 */}
           <button
             type="button"
-            onClick={() => setLightbox(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors"
+            onClick={e => { e.stopPropagation(); setLightbox(null) }}
+            className="absolute top-5 right-5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
           >
-            <X size={28} />
+            <X size={18} />
           </button>
 
-          <img
-            src={lightbox.images[lightbox.index]}
-            alt=""
-            className="max-w-full max-h-[90vh] object-contain"
-            onClick={e => e.stopPropagation()}
-          />
+          {/* 사진 영역 */}
+          <div className="relative flex items-center justify-center w-full px-12" onClick={e => e.stopPropagation()}>
+            {lightbox.index > 0 && (
+              <button
+                type="button"
+                onClick={() => setLightbox(prev => prev ? { ...prev, index: prev.index - 1 } : prev)}
+                className="absolute left-3 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                <ChevronLeft size={22} />
+              </button>
+            )}
 
-          {lightbox.images.length > 1 && (
-            <>
+            <img
+              key={lightbox.index}
+              src={lightbox.images[lightbox.index]}
+              alt=""
+              className="max-h-[75vh] max-w-full rounded-2xl shadow-2xl object-contain select-none"
+              style={{ animation: 'lbFadeIn .18s ease' }}
+            />
+
+            {lightbox.index < lightbox.images.length - 1 && (
               <button
                 type="button"
-                onClick={e => { e.stopPropagation(); setLightbox(prev => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev) }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white transition-colors disabled:opacity-30"
-                disabled={lightbox.index === 0}
+                onClick={() => setLightbox(prev => prev ? { ...prev, index: prev.index + 1 } : prev)}
+                className="absolute right-3 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
               >
-                <ChevronLeft size={36} />
+                <ChevronRight size={22} />
               </button>
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); setLightbox(prev => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev) }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white transition-colors disabled:opacity-30"
-                disabled={lightbox.index === lightbox.images.length - 1}
-              >
-                <ChevronRight size={36} />
-              </button>
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
-                {lightbox.index + 1} / {lightbox.images.length}
+            )}
+          </div>
+
+          {/* 도트 인디케이터 (20장 이하) or 카운터 */}
+          <div className="mt-5" onClick={e => e.stopPropagation()}>
+            {lightbox.images.length <= 20 ? (
+              <div className="flex gap-1.5">
+                {lightbox.images.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setLightbox(prev => prev ? { ...prev, index: i } : prev)}
+                    className={`rounded-full transition-all ${
+                      i === lightbox.index ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/35'
+                    }`}
+                  />
+                ))}
               </div>
-            </>
-          )}
+            ) : (
+              <p className="text-xs text-white/50">{lightbox.index + 1} / {lightbox.images.length}</p>
+            )}
+          </div>
         </div>
       )}
+      <style>{`@keyframes lbFadeIn { from { opacity: 0; transform: scale(.97) } to { opacity: 1; transform: scale(1) } }`}</style>
     </div>
   )
 }

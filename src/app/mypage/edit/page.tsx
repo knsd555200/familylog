@@ -16,7 +16,7 @@ const LIFE_STAGES = [
 async function patchUser(
   userId: string,
   token: string,
-  payload: { nickname: string; bio: string; life_stage: string | null; avatar_url: string }
+  payload: { nickname: string; bio: string; life_stage: string | null; avatar_url: string; family_start_date: string | null }
 ): Promise<boolean> {
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${userId}`,
@@ -38,10 +38,11 @@ export default function ProfileEditPage() {
   const router = useRouter()
   const { user, updateUser } = useAuth()
 
-  const [nickname,   setNickname]   = useState(user?.nickname  ?? '')
-  const [bio,        setBio]        = useState(user?.bio        ?? '')
-  const [lifeStage,  setLifeStage]  = useState<string | null>(user?.life_stage ?? null)
-  const [avatarUrl,  setAvatarUrl]  = useState(user?.avatar     ?? '')
+  const [nickname,         setNickname]         = useState(user?.nickname           ?? '')
+  const [bio,              setBio]              = useState(user?.bio                ?? '')
+  const [lifeStage,        setLifeStage]        = useState<string | null>(user?.life_stage ?? null)
+  const [familyStartDate,  setFamilyStartDate]  = useState(user?.family_start_date  ?? '')
+  const [avatarUrl,        setAvatarUrl]        = useState(user?.avatar             ?? '')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [preview,    setPreview]    = useState<string | null>(null)
   const [loading,    setLoading]    = useState(false)
@@ -79,10 +80,11 @@ export default function ProfileEditPage() {
       }
 
       const payload = {
-        nickname:   nickname.trim(),
-        bio:        bio.trim(),
-        life_stage: lifeStage,
-        avatar_url: finalAvatarUrl,
+        nickname:          nickname.trim(),
+        bio:               bio.trim(),
+        life_stage:        lifeStage,
+        avatar_url:        finalAvatarUrl,
+        family_start_date: familyStartDate || null,
       }
 
       const ok = await patchUser(user.id, session.access_token, payload)
@@ -90,10 +92,11 @@ export default function ProfileEditPage() {
 
       // AuthContext user 상태 즉시 갱신
       updateUser({
-        nickname:   payload.nickname,
-        bio:        payload.bio,
-        life_stage: payload.life_stage,
-        avatar:     finalAvatarUrl,
+        nickname:          payload.nickname,
+        bio:               payload.bio,
+        life_stage:        payload.life_stage,
+        avatar:            finalAvatarUrl,
+        family_start_date: payload.family_start_date,
       })
 
       router.back()
@@ -200,6 +203,18 @@ export default function ProfileEditPage() {
               )
             })}
           </div>
+        </div>
+
+        {/* 가족 시작일 */}
+        <div>
+          <label className="text-xs text-brand-sub mb-1.5 block">가족 시작일</label>
+          <p className="text-[11px] text-brand-muted mb-2">결혼 기념일 또는 가정을 이룬 날 (미입력 시 패밀로그 가입일 기준)</p>
+          <input
+            type="date"
+            value={familyStartDate}
+            onChange={e => setFamilyStartDate(e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-brand-line rounded-xl text-sm outline-none focus:border-brand-green transition-colors"
+          />
         </div>
 
         {error && <p className="text-sm text-red-500">{error}</p>}

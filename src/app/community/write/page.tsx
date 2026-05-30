@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Lock, Globe, ImagePlus, X, Calendar } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, Lock, Globe, Users, ImagePlus, X, Calendar, Camera } from 'lucide-react'
 import { createPost } from '@/lib/api/posts'
 import { uploadImages } from '@/lib/upload'
 import { useAuth } from '@/context/AuthContext'
@@ -14,8 +14,21 @@ const INPUT_CLS =
 
 export default function CommunityWritePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuth()
+
+  // 행사 인증 컨텍스트
+  const eventId          = searchParams.get('event_id')
+  const eventTitle       = searchParams.get('event_title') ?? ''
+  const eventMeritFromUrl = Number(searchParams.get('merit_reward') ?? 0)
+  const isEventVerify    = !!eventId
+
+  // 미션 탭 "오늘의 한 걸음"에서 넘어올 때 카테고리 프리필 (인증 글 제외)
+  const categoryFromUrl  = searchParams.get('category')
+  const writeCategory    = (['daily', 'concern', 'sharing'] as const).includes(categoryFromUrl as never)
+    ? (categoryFromUrl as 'daily' | 'concern' | 'sharing')
+    : 'daily'
 
   // 현재 로그인 유저가 관리자인지 여부
   const isAdmin = user?.role === 'admin'
@@ -26,7 +39,7 @@ export default function CommunityWritePage() {
   // ── 공통 필드 ─────────────────────────────────────────────────────────────
   const [title,      setTitle]      = useState('')
   const [content,    setContent]    = useState('')
-  const [visibility, setVisibility] = useState<'public' | 'members'>('members')
+  const [visibility, setVisibility] = useState<'public' | 'members' | 'private'>(isEventVerify ? 'public' : 'public')
   const [imageFiles,    setImageFiles]    = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -84,6 +97,7 @@ export default function CommunityWritePage() {
   const handleSubmit = async () => {
     if (!title.trim())   return setError('제목을 입력해주세요')
     if (!content.trim()) return setError('내용을 입력해주세요')
+    if (isEventVerify && imageFiles.length === 0) return setError('인증 사진을 첨부해주세요')
     if (isEvent && !eventStartAt) return setError('행사 시작일시를 입력해주세요')
 
     setLoading(true)
@@ -119,10 +133,11 @@ export default function CommunityWritePage() {
               event_is_closed:        false,
             }
           : {
-              post_type:    'community',
-              title:        title.trim(),
-              content:      content.trim(),
-              category:     'daily',
+              post_type:           'community',
+              title:               title.trim(),
+              content:             content.trim(),
+              category:            isEventVerify ? 'practice' : writeCategory,
+              verify_merit_reward: isEventVerify ? eventMeritFromUrl : undefined,
               visibility,
               media_urls,
               thumbnail_url: media_urls[0] ?? undefined,
@@ -130,7 +145,7 @@ export default function CommunityWritePage() {
       )
 
       if (result.success) {
-        router.push('/community')
+        router.push(isEventVerify ? `/events/${eventId}` : '/community')
         router.refresh()
       } else {
         setError(result.error ?? '저장에 실패했어요. 다시 시도해주세요.')
@@ -164,6 +179,17 @@ export default function CommunityWritePage() {
 
       <div className="px-4 lg:px-6 py-5 space-y-5">
 
+        {/* ── 행사 인증 컨텍스트 배지 ────────────────────────────────────── */}
+        {isEventVerify && (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-brand-green-light rounded-xl">
+            <Camera size={15} className="text-brand-green flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-brand-green-dark">참여 인증 글</p>
+              <p className="text-xs text-brand-green truncate">{eventTitle}</p>
+            </div>
+          </div>
+        )}
+
         {/* ── 관리자 전용: 글 유형 토글 ──────────────────────────────────── */}
         {isAdmin && (
           <div>
@@ -190,19 +216,11 @@ export default function CommunityWritePage() {
           </div>
         )}
 
-        {/* ── 공개 범위 (행사 글이면 숨김 — 'public'으로 자동 고정) ─────── */}
-        {!isEvent && (
+        {/* ── 공개 범위 (행사 글·인증 글이면 숨김 — 'public'으로 자동 고정) ─────── */}
+        {!isEvent && !isEventVerify && (
           <div>
             <label className="text-xs text-brand-sub mb-2 block">공개 범위</label>
             <div className="flex gap-2">
-              <button
-                onClick={() => setVisibility('members')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  visibility === 'members' ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
-                }`}
-              >
-                <Lock size={12} /> 멤버 공개
-              </button>
               <button
                 onClick={() => setVisibility('public')}
                 className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -210,6 +228,22 @@ export default function CommunityWritePage() {
                 }`}
               >
                 <Globe size={12} /> 전체 공개
+              </button>
+              <button
+                onClick={() => setVisibility('members')}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  visibility === 'members' ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
+                }`}
+              >
+                <Users size={12} /> 멤버 공개
+              </button>
+              <button
+                onClick={() => setVisibility('private')}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  visibility === 'private' ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
+                }`}
+              >
+                <Lock size={12} /> 가족만
               </button>
             </div>
           </div>

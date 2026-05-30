@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase'
-import { addMerit } from '@/lib/api/merits'
 
 // ─── 타입 정의 ────────────────────────────────────────────────────────────────
 
@@ -158,28 +157,6 @@ export async function joinEvent(
       console.error('[joinEvent] 신청 INSERT 실패:', insertError.message)
       return false
     }
-
-    // 행사 글의 event_merit_reward 값 조회
-    const { data: post, error: postError } = await supabase
-      .from('posts')
-      .select('event_merit_reward')
-      .eq('id', postId)
-      .maybeSingle()
-
-    if (postError) {
-      console.error('[joinEvent] event_merit_reward 조회 실패:', postError.message)
-    }
-
-    // 포인트 적립 (event_merit_reward가 없으면 기본값 50 사용)
-    await addMerit({
-      userId,
-      meritType:     'event_joined',
-      points:        post?.event_merit_reward ?? 50,
-      category:      'events',
-      referenceType: 'post',
-      referenceId:   postId,
-      note:          '행사 참여',
-    })
 
     return true
   } catch (err) {

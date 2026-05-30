@@ -18,6 +18,8 @@ interface User {
   family_id: string | null
   created_at: string | null
   life_stage: string | null
+  family_start_date: string | null
+  visibility: string
 }
 
 interface AuthContextType {
@@ -60,10 +62,12 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
     family_id: null,
     created_at: null,
     life_stage: null,
+    family_start_date: null,
+    visibility: 'members',
   }
 
   try {
-    const dbUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=id,nickname,avatar_url,bio,role,tier,merit_total,family_id,created_at,life_stage&limit=1`
+    const dbUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=id,nickname,avatar_url,bio,role,tier,merit_total,family_id,created_at,life_stage,family_start_date,visibility&limit=1`
     const dbRes = await fetch(dbUrl, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -89,6 +93,8 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
       family_id: data.family_id ?? null,
       created_at: data.created_at ?? null,
       life_stage: data.life_stage ?? null,
+      family_start_date: data.family_start_date ?? null,
+      visibility: data.visibility ?? 'members',
     }
   } catch {
     return fallback

@@ -12,6 +12,7 @@ export async function addMerit({
   meritType,
   points,
   category,
+  rawValue,
   referenceType,
   referenceId,
   note,
@@ -20,6 +21,7 @@ export async function addMerit({
   meritType: string
   points: number
   category: string
+  rawValue?: number
   referenceType?: string
   referenceId?: string
   note?: string
@@ -60,7 +62,7 @@ export async function addMerit({
       merit_type:     meritType,
       category:       category,
       points:         points,
-      raw_value:      null,
+      raw_value:      rawValue ?? null,
       reference_type: referenceType ?? null,
       reference_id:   referenceId ?? null,
       note:           note ?? null,
