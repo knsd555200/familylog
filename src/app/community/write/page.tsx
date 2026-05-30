@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Lock, Globe, Users, ImagePlus, X, Calendar, Camera } from 'lucide-react'
 import { createPost } from '@/lib/api/posts'
@@ -12,7 +12,7 @@ const MAX_IMAGES = 3
 const INPUT_CLS =
   'w-full px-3 py-2.5 text-sm bg-brand-card border border-brand-line rounded-xl outline-none focus:border-brand-green transition-colors placeholder:text-brand-muted'
 
-export default function CommunityWritePage() {
+function CommunityWriteForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -395,5 +395,14 @@ export default function CommunityWritePage() {
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
     </div>
+  )
+}
+
+// useSearchParams() 사용 — 프리렌더 정적 bail-out 방지를 위해 Suspense로 감쌈
+export default function CommunityWritePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-24 text-brand-muted text-sm">불러오는 중...</div>}>
+      <CommunityWriteForm />
+    </Suspense>
   )
 }
