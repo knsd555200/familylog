@@ -145,8 +145,10 @@ function CommunityWriteForm() {
       )
 
       if (result.success) {
-        router.push(isEventVerify ? `/events/${eventId}` : '/community')
-        router.refresh()
+        // replace로 히스토리에서 write 페이지를 제거 — 뒤로 가기 시 write로 돌아오지 않음
+        router.replace(
+          isEventVerify ? `/events/${eventId}` : result.id ? `/community/${result.id}` : '/community'
+        )
       } else {
         setError(result.error ?? '저장에 실패했어요. 다시 시도해주세요.')
       }
@@ -158,7 +160,8 @@ function CommunityWriteForm() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-20 lg:pb-6">
+    // 아래에서 슬라이드업 — 작성 박스에서 확장되는 느낌
+    <div className="max-w-2xl mx-auto pb-20 lg:pb-6" style={{ animation: 'writeSlideUp 0.28s ease-out' }}>
       {/* 상단 바 */}
       <div className="sticky top-14 lg:top-0 z-20 bg-brand-bg/95 backdrop-blur-sm border-b border-brand-line px-4 lg:px-6 py-3 flex items-center justify-between">
         <button onClick={() => router.back()} className="flex items-center gap-1.5 text-brand-sub">
@@ -257,6 +260,7 @@ function CommunityWriteForm() {
             value={title}
             onChange={e => setTitle(e.target.value)}
             maxLength={100}
+            autoFocus  // 진입 즉시 포커스 — 박스에서 바로 이어 쓰는 느낌
             className="w-full text-lg font-medium bg-transparent border-none outline-none placeholder:text-brand-muted"
           />
         </div>
@@ -394,6 +398,7 @@ function CommunityWriteForm() {
 
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
+      <style>{`@keyframes writeSlideUp { from { opacity: 0; transform: translateY(40px) } to { opacity: 1; transform: translateY(0) } }`}</style>
     </div>
   )
 }

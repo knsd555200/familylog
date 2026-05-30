@@ -38,6 +38,72 @@ body {
   scroll-snap-type: y mandatory;
 }
 
+/* 페이지 전환 모션 */
+/* 본문: 빈 화면 깜빡임을 막기 위한 아주 짧은 페이드 (이동 없음) */
+@keyframes page-enter {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-transition {
+  animation: page-enter 0.2s ease-out;
+}
+
+/* 상단 얇은 로딩바 (유튜브식) — 이동 중 피드백 */
+@keyframes page-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  60% {
+    transform: translateX(-15%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes page-bar-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+.page-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.page-bar::before {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #639922, #3B6D11);
+  transform: translateX(-100%);
+  animation:
+    page-bar 0.5s cubic-bezier(0.3, 0, 0.2, 1) forwards,
+    page-bar-fade 0.25s ease-out 0.45s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition {
+    animation: none;
+  }
+  .page-bar {
+    display: none;
+  }
+}
+
 .snap-start {
   scroll-snap-align: start;
 }

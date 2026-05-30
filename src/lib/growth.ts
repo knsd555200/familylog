@@ -17,6 +17,11 @@ export interface GrowthStats {
   postedToday?: boolean      // 오늘 글을 남겼는지 (posts 기준)
   postedThisWeek?: boolean   // 이번 주(월~) 글을 남겼는지
   weekDays?: boolean[]       // 이번 주 월~일 활동 여부 (merits 기준, 7칸)
+  // 미션 탭 "이번 주 미션" 진행도 — 이번 주(월~) 활동 횟수 (merits 기준)
+  commentsThisWeek?: number  // 댓글
+  eventsThisWeek?: number    // 행사 참여
+  volunteerThisWeek?: number // 봉사 기록
+  donationThisWeek?: number  // 후원 기록
 }
 
 // ── 라벨 ──────────────────────────────────────────────────────────────────────
@@ -270,6 +275,72 @@ export function getTodayStep(ctx: TodayStepContext): TodayStep {
   return { emoji: pick.emoji, headline: pick.headline, cta: pick.cta, href: writeHref(pick.category) }
 }
 
+// ── "이번 주 미션" 엔진 ─────────────────────────────────────────────────────────
+// 미션 탭의 행동 목록. 별도 DB 없이 fetchGrowthStats의 주간 집계에서 완료 여부를 파생.
+// 각 미션은 탭하면 행동 화면으로 이동(link)하거나 기록 시트를 연다(sheet).
+export interface WeeklyMission {
+  id: string
+  emoji: string
+  title: string
+  hint?: string                 // 부연 한 줄 (선택)
+  cta: string                   // 버튼 동사 문구
+  reward: string                // 보상 표기 ("+10P" 등)
+  value: number                 // 현재 진행값
+  target: number                // 목표값 (1이면 단순 완료형)
+  done: boolean
+  action:
+    | { type: 'link'; href: string }
+    | { type: 'sheet'; sheet: 'volunteer' | 'donation' }
+}
+
+export function getWeeklyMissions(s: GrowthStats): WeeklyMission[] {
+  const activeCnt = (s.weekDays ?? []).filter(Boolean).length
+  const comments  = s.commentsThisWeek  ?? 0
+  const events    = s.eventsThisWeek    ?? 0
+  const vols      = s.volunteerThisWeek ?? 0
+  const dons      = s.donationThisWeek  ?? 0
+
+  return [
+    {
+      id: 'write', emoji: '🌿', title: '이번 주 이야기 한 편 남기기',
+      cta: '이야기 남기기', reward: '+10P 적립',
+      value: s.postedThisWeek ? 1 : 0, target: 1, done: !!s.postedThisWeek,
+      action: { type: 'link', href: '/community/write?category=daily' },
+    },
+    {
+      id: 'comment', emoji: '💬', title: '이웃 가정 글에 댓글로 응원하기',
+      cta: '피드 보러 가기', reward: '+5P 적립',
+      value: Math.min(comments, 1), target: 1, done: comments >= 1,
+      action: { type: 'link', href: '/community' },
+    },
+    {
+      id: 'rhythm', emoji: '📅', title: '한 주에 3일 이상 들르기',
+      cta: '오늘 활동하러 가기', reward: '🔥 연속 리듬',
+      hint: '꾸준함이 가장 큰 한 걸음이에요',
+      value: activeCnt, target: 3, done: activeCnt >= 3,
+      action: { type: 'link', href: '/community' },
+    },
+    {
+      id: 'event', emoji: '🎉', title: '가족 행사 한 번 함께하기',
+      cta: '행사 둘러보기', reward: '행사별 보상',
+      value: events >= 1 ? 1 : 0, target: 1, done: events >= 1,
+      action: { type: 'link', href: '/events' },
+    },
+    {
+      id: 'volunteer', emoji: '🤝', title: '봉사한 시간 기록하기',
+      cta: '봉사 시간 기록하기', reward: '시간당 +5P',
+      value: vols >= 1 ? 1 : 0, target: 1, done: vols >= 1,
+      action: { type: 'sheet', sheet: 'volunteer' },
+    },
+    {
+      id: 'donation', emoji: '💝', title: '나눔 한 번 실천하기',
+      cta: '후원 기록하기', reward: '+15P 적립',
+      value: dons >= 1 ? 1 : 0, target: 1, done: dons >= 1,
+      action: { type: 'sheet', sheet: 'donation' },
+    },
+  ]
+}
+
 // ── 날짜 포맷 ─────────────────────────────────────────────────────────────────
 export function fmtDate(iso: string | null) {
   if (!iso) return '알 수 없는 날'
@@ -308,6 +379,7 @@ export async function fetchGrowthStats(uid: string, token: string): Promise<Grow
   const weekStart = mondayOf(now)
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
   const rhythm = getWeekRhythm(meritsAsc.map(m => m.created_at))
+  const inWeek = (iso: string) => new Date(iso).getTime() >= weekStart
 
   return {
     postCount:          postsAsc.length,
@@ -322,6 +394,10 @@ export async function fetchGrowthStats(uid: string, token: string): Promise<Grow
     postedToday:        postsAsc.some(p => new Date(p.created_at).getTime() >= todayStart.getTime()),
     postedThisWeek:     postsAsc.some(p => new Date(p.created_at).getTime() >= weekStart),
     weekDays:           rhythm.days,
+    commentsThisWeek:   meritsAsc.filter(m => m.merit_type === 'comment_created' && inWeek(m.created_at)).length,
+    eventsThisWeek:     evts.filter(m => inWeek(m.created_at)).length,
+    volunteerThisWeek:  vols.filter(m => inWeek(m.created_at)).length,
+    donationThisWeek:   dons.filter(m => inWeek(m.created_at)).length,
   }
 }
 

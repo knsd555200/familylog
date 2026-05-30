@@ -3,7 +3,7 @@ import { addMerit } from '@/lib/api/merits'
 import { FeedPost } from '@/types/post'
 import { CommunityPost } from '@/types/post'
 
-function formatTime(iso: string): string {
+export function formatTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const m = Math.floor(diff / 60000)
   if (m < 60) return `${m}분 전`
@@ -58,6 +58,7 @@ function dbToFeedPost(p: any): FeedPost {
     authorId: p.author_id,
     // DB post_type 전달 — CommentDrawer에서 event 여부 판단에 사용
     postType: p.post_type ?? undefined,
+    createdAt: p.created_at,
   }
 }
 
@@ -79,6 +80,7 @@ function dbToCommunityPost(p: any): CommunityPost {
     visibility: p.visibility === 'members' ? 'member' : 'public' as 'public' | 'member',
     commentList: [],
     authorId: p.author_id,
+    createdAt: p.created_at,
   }
 }
 

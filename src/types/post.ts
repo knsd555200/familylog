@@ -25,6 +25,8 @@ export interface CommunityPost {
   visibility: 'public' | 'member'
   commentList: Comment[]
   authorId?: string
+  // 정렬·상대시간 표시용 원시 타임스탬프 (ISO). mock은 합성값
+  createdAt?: string
 }
 
 export interface FeedPost {
@@ -43,4 +45,6 @@ export interface FeedPost {
   authorId?: string
   // DB posts.post_type 값 — CommentDrawer에서 event 여부 판단에 사용
   postType?: string
+  // 정렬·상대시간 표시용 원시 타임스탬프 (ISO). mock은 합성값
+  createdAt?: string
 }

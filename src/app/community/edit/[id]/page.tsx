@@ -145,8 +145,7 @@ export default function CommunityEditPage() {
     if (result.success) {
       // DB 업데이트 성공 후 R2에서 삭제된 파일 제거
       await deleteImages(deletedUrls)
-      router.push(`/community/${postId}`)
-      router.refresh()
+      router.replace(`/community/${postId}`)
     } else {
       setError(result.error ?? '저장에 실패했어요. 다시 시도해주세요.')
       setLoading(false)

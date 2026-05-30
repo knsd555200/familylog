@@ -6,13 +6,14 @@ import { communityPosts } from '@/data/community'
 import { feedPosts } from '@/data/feed'
 import type { CommunityPost, FeedPost } from '@/types/post'
 import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
-import { getDbCommunityPosts, getDbFeedPosts, getMyLikes, toggleLike } from '@/lib/api/posts'
+import { getDbCommunityPosts, getDbFeedPosts, getMyLikes, toggleLike, formatTime } from '@/lib/api/posts'
 import { getEventPosts, type EventPost } from '@/lib/api/events'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import PostMenu from '@/components/community/PostMenu'
 import ShareMenu from '@/components/community/ShareMenu'
 import CommentDrawer from '@/components/feed/CommentDrawer'
+import { byNewest, makePopularComparator, type SortMode } from '@/lib/feed/ranking'
 
 function useDragScroll() {
   const ref = useRef<HTMLDivElement>(null)
@@ -58,7 +59,7 @@ function ImageStrip({ images, onOpen }: { images: string[]; onOpen: (e: React.Mo
           onClick={(e) => { if (!wasDragging()) onOpen(e, idx) }}
           className="flex-shrink-0"
         >
-          <div className="w-48 h-36 rounded-xl overflow-hidden pointer-events-none">
+          <div className="w-56 h-44 rounded-2xl overflow-hidden pointer-events-none"> {/* 다중 사진 썸네일 크기 업 */}
             <img src={src} alt="" className="w-full h-full object-cover" />
           </div>
         </button>
@@ -114,6 +115,17 @@ interface CardPost {
   comments: number
   authorId?: string
   postType?: string
+  createdAt?: string
+}
+
+// 피드 메모리 캐시 — 재방문 시 스켈레톤 깜빡임 방지 (보여주고 뒤에서 갱신)
+let feedCache: { popular: CardPost[]; latest: CardPost[] } | null = null
+
+// mock(시드) 글에는 실제 타임스탬프가 없으므로 합성값 부여 —
+// "2시간 전"부터 40분 간격으로 과거로. 새 실제 글이 항상 위에 오도록.
+const MOCK_EPOCH = Date.now()
+function mockCreatedAt(index: number): string {
+  return new Date(MOCK_EPOCH - (120 + index * 40) * 60 * 1000).toISOString()
 }
 
 function feedToCard(p: FeedPost): CardPost {
@@ -130,6 +142,7 @@ function feedToCard(p: FeedPost): CardPost {
     comments: p.comments,
     authorId: p.authorId,
     postType: p.postType,
+    createdAt: p.createdAt,
   }
 }
 
@@ -146,6 +159,7 @@ function communityToCard(p: CommunityPost): CardPost {
     likes: p.likes,
     comments: p.comments,
     authorId: p.authorId,
+    createdAt: p.createdAt,
   }
 }
 
@@ -205,12 +219,14 @@ export default function CommunityPage() {
   const router = useRouter()
   const { user, isLoading } = useAuth()
   const [feedTab, setFeedTab] = useState<FeedTab>('이야기')
+  const [sortMode, setSortMode] = useState<SortMode>('latest') // 기본 최신순, 인기순은 옵션
   const [familyMemberIds, setFamilyMemberIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [popularPosts, setPopularPosts] = useState<CardPost[]>([])
-  const [latestPosts, setLatestPosts] = useState<CardPost[]>([])
-  const [postsLoading, setPostsLoading] = useState(true)
+  const [popularPosts, setPopularPosts] = useState<CardPost[]>(() => feedCache?.popular ?? [])
+  const [latestPosts, setLatestPosts] = useState<CardPost[]>(() => feedCache?.latest ?? [])
+  // 캐시가 있으면 스켈레톤 없이 바로 표시, 없을 때(최초)만 로딩
+  const [postsLoading, setPostsLoading] = useState(() => feedCache === null)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const likingRef = useRef<Set<string>>(new Set())
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
@@ -271,22 +287,35 @@ export default function CommunityPage() {
 
   useEffect(() => {
     if (isLoading) return
-    setPostsLoading(true)
+    // 캐시가 있으면 화면에 그대로 두고 뒤에서 조용히 갱신 (스켈레톤 X)
+    if (feedCache === null) setPostsLoading(true)
     Promise.all([getDbFeedPosts(), getDbCommunityPosts()])
       .then(([dbFeedPosts, dbCommunityPosts]) => {
         const dbFeedCards = dbFeedPosts.map(feedToCard)
-        const mockFeedCards = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
-        const popular = [...dbFeedCards, ...mockFeedCards]
+        const mockFeedCards = feedPosts
+          .filter(p => !isDbPostId(p.id))
+          .map((p, i) => feedToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
+        const popular = [...dbFeedCards, ...mockFeedCards].sort(byNewest)
         setPopularPosts(popular)
 
         const dbCommunityCards = dbCommunityPosts.map(communityToCard)
-        const mockCommunityCards = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
-        const latest = [...dbCommunityCards, ...mockCommunityCards]
+        const mockCommunityCards = communityPosts
+          .filter(p => !isDbPostId(p.id))
+          .map((p, i) => communityToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
+        const latest = [...dbCommunityCards, ...mockCommunityCards].sort(byNewest)
         setLatestPosts(latest)
+
+        feedCache = { popular, latest }
       })
       .catch(() => {
-        const popular = feedPosts.filter(p => !isDbPostId(p.id)).map(feedToCard)
-        const latest = communityPosts.filter(p => !isDbPostId(p.id)).map(communityToCard)
+        const popular = feedPosts
+          .filter(p => !isDbPostId(p.id))
+          .map((p, i) => feedToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
+          .sort(byNewest)
+        const latest = communityPosts
+          .filter(p => !isDbPostId(p.id))
+          .map((p, i) => communityToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
+          .sort(byNewest)
         setPopularPosts(popular)
         setLatestPosts(latest)
       })
@@ -393,9 +422,17 @@ export default function CommunityPage() {
 
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
-  const filtered = feedTab === '우리 가족'
-    ? popularPosts.filter(p => p.authorId != null && familyMemberIds.has(p.authorId))
-    : popularPosts
+  // 탭 필터 → 정렬. popularPosts는 로드 시 최신순으로 보관되어 있으므로
+  // 'latest'는 그대로, 'popular'만 점수순으로 재정렬한다.
+  // 정렬은 로드된 likes/comments 기준(낙관적 likeCounts 미사용) — 좋아요 시 카드가 튀지 않게.
+  const filtered = useMemo(() => {
+    const base = feedTab === '우리 가족'
+      ? popularPosts.filter(p => p.authorId != null && familyMemberIds.has(p.authorId))
+      : popularPosts
+    return sortMode === 'popular'
+      ? [...base].sort(makePopularComparator())
+      : base
+  }, [feedTab, popularPosts, familyMemberIds, sortMode])
 
   const activePost = useMemo((): FeedPost | null => {
     if (!activeCommentPostId) return null
@@ -483,8 +520,8 @@ export default function CommunityPage() {
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-6">
       {/* 상단 sticky 헤더 — 피드 탭 (X 스타일 언더라인) */}
-      <div className="sticky top-14 lg:top-0 z-20 bg-brand-bg/95 backdrop-blur-sm border-b border-brand-line">
-        <div className="flex">
+      <div className="sticky top-14 lg:top-0 z-20 bg-brand-bg/95 backdrop-blur-sm">
+        <div className="flex border-b border-brand-line">
           {FEED_TABS.map(t => (
             <button
               key={t}
@@ -509,6 +546,28 @@ export default function CommunityPage() {
 
       {/* 카드 목록 */}
       <div className="px-4 lg:px-6 py-4 space-y-4">
+        {/* 라벨(정렬 반영) + 정렬 토글 */}
+        <div className="flex items-center justify-between">
+          <span className="font-serif text-sm font-semibold text-brand-text">
+            {sortMode === 'popular' ? '지금 인기 있는' : '최근 이야기'}
+          </span>
+          <div className="inline-flex items-center gap-0.5 bg-brand-card rounded-full p-0.5 text-xs">
+            {([['latest', '최신순'], ['popular', '인기순']] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setSortMode(mode)}
+                className={`px-3 py-1 rounded-full transition-colors ${
+                  sortMode === mode
+                    ? 'bg-white text-brand-text font-semibold shadow-sm'
+                    : 'text-brand-muted hover:text-brand-text'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {postsLoading ? (
           [1, 2, 3].map(n => (
             <div key={n} className="bg-white rounded-2xl border border-brand-line p-4 animate-pulse">
@@ -529,6 +588,24 @@ export default function CommunityPage() {
           ))
         ) : (
           <>
+            {/* 글이 없을 때 빈 상태 — 첫 기록을 유도 */}
+            {filtered.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="text-5xl mb-5">🌿</div>
+                <p className="font-serif text-lg font-medium text-brand-text mb-2">아직 조용해요</p>
+                <p className="text-sm text-brand-muted leading-relaxed mb-8">
+                  {feedTab === '우리 가족'
+                    ? '가족이 남긴 이야기가 여기 쌓여요'
+                    : '첫 이야기를 남기면\n피드가 시작돼요'}
+                </p>
+                <Link
+                  href="/community/write"
+                  className="px-6 py-3 bg-brand-green text-white text-sm font-medium rounded-full"
+                >
+                  첫 이야기 남기기
+                </Link>
+              </div>
+            )}
             {filtered.map((post, index) => {
               const isExpanded = expandedIds.has(post.id)
               return (
@@ -541,7 +618,10 @@ export default function CommunityPage() {
                         <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{post.authorName}</div>
-                          <div className="text-xs text-brand-muted">{post.authorStatus}</div>
+                          <div className="text-xs text-brand-muted truncate">
+                            {post.authorStatus}
+                            {post.createdAt && ` · ${formatTime(post.createdAt)}`}
+                          </div>
                         </div>
                         {post.category === '인증' && (
                           <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium flex-shrink-0">
@@ -559,7 +639,7 @@ export default function CommunityPage() {
                         )}
                       </div>
 
-                      <h3 className="font-semibold text-base leading-snug mb-2">{post.title}</h3>
+                      <h3 className="font-serif font-semibold text-base leading-snug mb-2">{post.title}</h3> {/* Serif 제목 — '기록' 정서 */}
 
                       <PostPreview
                         text={post.preview}
@@ -570,17 +650,16 @@ export default function CommunityPage() {
 
                     {/* 구역 B: 사진 — 클릭 시 라이트박스 */}
                     {post.images.length === 1 && (
-                      <div className="px-4 pb-3">
-                        <button
-                          type="button"
-                          onClick={(e) => openLightbox(e, post.images, 0)}
-                          className="block"
-                        >
-                          <div className="w-64 h-48 rounded-xl overflow-hidden">
-                            <img src={post.images[0]} alt="" className="w-full h-full object-cover" />
-                          </div>
-                        </button>
-                      </div>
+                      // 단일 사진 풀블리드 — 카드 좌우 꽉 채워 기록 느낌
+                      <button
+                        type="button"
+                        onClick={(e) => openLightbox(e, post.images, 0)}
+                        className="block w-full px-4 pb-3"
+                      >
+                        <div className="w-full aspect-[4/3] lg:aspect-[16/9] overflow-hidden rounded-xl">
+                          <img src={post.images[0]} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      </button>
                     )}
                     {post.images.length > 1 && (
                       <ImageStrip
@@ -618,6 +697,41 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
+                  {/* 작성 유도 박스 — 2번째 글 아래 자연 삽입 */}
+                  {index === 1 && (
+                    <Link
+                      href={user ? '/community/write' : '/login'}
+                      className="block bg-brand-green-light/60 rounded-2xl border-2 border-brand-green/30 p-5 hover:border-brand-green/60 hover:bg-brand-green-light transition-colors"
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        {user ? (
+                          <img
+                            src={user.avatar || `https://picsum.photos/seed/${user.id}/100/100`}
+                            alt=""
+                            className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          // 비로그인: 패밀로그 로고를 아바타 자리에
+                          <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center flex-shrink-0 p-1.5">
+                            <img src="/familog_logo_가로.png" alt="패밀로그" className="w-full h-full object-contain" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-serif font-semibold text-base text-brand-text leading-snug">
+                            오늘 어떤 이야기가 있었나요?
+                          </p>
+                          <p className="text-xs text-brand-sub mt-0.5">
+                            가족과 나누고 싶은 순간을 기록해 보세요
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center gap-2 w-full py-3 bg-brand-green text-white text-sm font-semibold rounded-full">
+                        <PenSquare size={17} />
+                        이야기 남기기
+                      </div>
+                    </Link>
+                  )}
+
                   {/* 5번째 게시글(index 4) 아래에 행사 배너 삽입 */}
                   {index === 4 && eventBannerNode}
                 </Fragment>
@@ -644,8 +758,8 @@ export default function CommunityPage() {
         </div>
       )}
 
-      {/* FAB 글쓰기 */}
-      <Link href="/community/write" className="fixed right-4 bottom-24 lg:bottom-8 lg:right-8 z-30 w-14 h-14 bg-brand-green rounded-full shadow-xl flex items-center justify-center text-white">
+      {/* FAB 글쓰기 — 데스크탑 전용 */}
+      <Link href={user ? '/community/write' : '/login'} className="hidden lg:flex fixed right-8 bottom-8 z-30 w-14 h-14 bg-brand-green rounded-full shadow-xl items-center justify-center text-white">
         <PenSquare size={22} />
       </Link>
 

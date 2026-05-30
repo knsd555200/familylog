@@ -3,6 +3,7 @@ import { usePathname } from 'next/navigation'
 import BottomNav from './BottomNav'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import PageTransition from './PageTransition'
 import OnboardingModal from '@/components/ui/OnboardingModal'
 import { useAuth } from '@/context/AuthContext'
 
@@ -34,7 +35,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className={!hideNav ? 'lg:ml-64' : ''}>
         {!hideNav && <Header />}
         <main className={`${!hideNav ? 'pb-20 lg:pb-0 pt-14 lg:pt-0' : ''}`}>
-          {children}
+          <PageTransition>{children}</PageTransition>
         </main>
         {!hideNav && (
           <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20 }}>

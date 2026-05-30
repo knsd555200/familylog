@@ -1,14 +1,16 @@
 'use client'
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { X, Check, ChevronRight, ChevronDown, ArrowRight } from 'lucide-react'
+import { X, Check, ChevronRight, ArrowRight, Sparkles } from 'lucide-react'
 import {
-  TIER_CONFIG, getTierProgress, BADGES, getAchievedStage, getBadgeValue,
-  getNudgeText, getTodayStep, fetchGrowthStats, type GrowthStats,
+  TIER_CONFIG, getTierProgress,
+  getWeeklyMissions, fetchGrowthStats,
+  type GrowthStats, type WeeklyMission,
 } from '@/lib/growth'
 import { addMerit } from '@/lib/api/merits'
+import { getEventPosts } from '@/lib/api/events'
 
 // ── 티어 상세 시트 ───────────────────────────────────────────────────────────
 function TierSheet({ currentPoints, onClose }: { currentPoints: number; onClose: () => void }) {
@@ -257,64 +259,80 @@ function DonationSheet({ userId, onClose, onSuccess }: { userId: string; onClose
   )
 }
 
-// ── 포인트 적립 규칙 안내 (접이식) ───────────────────────────────────────────
-function PointRules() {
-  const [open, setOpen] = useState(false)
-  const Row = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <span className="text-xs text-brand-sub flex-shrink-0">{label}</span>
-      <span className="text-xs text-brand-text text-right">{value}</span>
-    </div>
+// ── 미션 한 줄 (링크로 이동하거나 기록 시트를 연다) ────────────────────────────
+function MissionRow({ m, onVolunteer, onDonation }: {
+  m: WeeklyMission
+  onVolunteer: () => void
+  onDonation: () => void
+}) {
+  const inner = (
+    <>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ${m.done ? 'bg-brand-green' : 'bg-brand-card'}`}>
+        {m.done ? <Check size={18} className="text-white" strokeWidth={3} /> : m.emoji}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium leading-snug ${m.done ? 'text-brand-muted line-through' : 'text-brand-text'}`}>{m.title}</p>
+        {!m.done && m.target > 1 ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex-1 h-1 bg-brand-card rounded-full overflow-hidden">
+              <div className="h-1 bg-brand-green rounded-full transition-all" style={{ width: `${Math.min(100, (m.value / m.target) * 100)}%` }} />
+            </div>
+            <span className="text-[10px] text-brand-muted flex-shrink-0">{m.value}/{m.target}</span>
+          </div>
+        ) : !m.done && m.hint ? (
+          <p className="text-[11px] text-brand-muted mt-0.5 leading-snug">{m.hint}</p>
+        ) : null}
+      </div>
+      <span className={`text-xs font-medium flex-shrink-0 ${m.done ? 'text-brand-muted' : 'text-brand-green'}`}>{m.reward}</span>
+      {!m.done && <ChevronRight size={15} className="text-brand-muted flex-shrink-0" />}
+    </>
   )
+  const cls = `w-full flex items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-colors ${m.done ? 'bg-brand-green-light/50 border-brand-green/20' : 'bg-white border-brand-line hover:bg-brand-card'}`
+  if (m.action.type === 'link') {
+    return <Link href={m.action.href} className={cls}>{inner}</Link>
+  }
+  const sheet = m.action.sheet
   return (
-    <section>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between bg-white rounded-2xl border border-brand-line px-4 py-3.5 hover:bg-brand-card transition-colors"
-      >
-        <span className="text-sm font-medium text-brand-text">마음은 어떻게 쌓이나요?</span>
-        <ChevronDown size={18} className={`text-brand-muted transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="mt-2 bg-white rounded-2xl border border-brand-line px-4 py-4">
-          <p className="text-[11px] font-semibold text-brand-green-dark mb-1">쌓일 때</p>
-          <div className="divide-y divide-brand-line/60">
-            <Row label="이야기 작성" value="전체공개 +10 · 멤버공개 +5 · 가족만 0 (하루 1회)" />
-            <Row label="댓글 작성"   value="+5 (하루 3회 · 내 글 제외)" />
-            <Row label="공감 받음"   value="+2 (하루 5회)" />
-            <Row label="행사 인증"   value="행사마다 정해진 보상" />
-            <Row label="봉사 기록"   value="1시간당 +5" />
-            <Row label="후원 기록"   value="1회 +15" />
-          </div>
-          <p className="text-[11px] font-semibold text-brand-green-dark mt-4 mb-1">되돌릴 때</p>
-          <div className="divide-y divide-brand-line/60">
-            <Row label="직접 삭제·취소" value="24시간 안의 글·댓글·공감은 점수도 함께 돌아가요" />
-            <Row label="운영자 정리"     value="운영자가 정리한 글은 점수를 회수하지 않아요" />
-          </div>
-          <p className="mt-4 text-center text-[11px] text-brand-muted leading-relaxed">
-            포인트는 꾸준함이 남긴 흔적일 뿐,<br />자랑하기 위한 점수가 아니에요.
-          </p>
-        </div>
-      )}
-    </section>
+    <button type="button" onClick={() => (sheet === 'volunteer' ? onVolunteer() : onDonation())} className={cls}>
+      {inner}
+    </button>
   )
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export default function BenefitsPage() {
   const { user, isLoading: authLoading } = useAuth()
-  const [stats,    setStats]    = useState<GrowthStats | null>(null)
-  const [loading,  setLoading]  = useState(true)
-  const [showTier, setShowTier] = useState(false)
-  const [showVol,  setShowVol]  = useState(false)
-  const [showDon,  setShowDon]  = useState(false)
+  const [stats,      setStats]      = useState<GrowthStats | null>(null)
+  const [postImage,  setPostImage]  = useState<string | null>(null)
+  const [eventImage, setEventImage] = useState<string | null>(null)
+  const [loading,    setLoading]    = useState(true)
+  const [showTier,   setShowTier]   = useState(false)
+  const [showVol,    setShowVol]    = useState(false)
+  const [showDon,    setShowDon]    = useState(false)
 
   const loadStats = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session || !user) return
     try { setStats(await fetchGrowthStats(user.id, session.access_token)) }
     catch { setStats(null) }
+    // 배너 커버용 — 사진이 있는 최신 공개 게시글 1개
+    try {
+      const { data } = await supabase
+        .from('posts')
+        .select('media_urls')
+        .is('deleted_at', null)
+        .neq('visibility', 'family')
+        .not('media_urls', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      const url = (data?.[0] as any)?.media_urls?.[0]
+      if (url) setPostImage(url)
+    } catch { /* ignore */ }
+    // 배너 커버용 — 다가오는 공식 행사 이미지 1개
+    try {
+      const e = (await getEventPosts())[0] as any
+      if (e?.thumbnail_url) setEventImage(e.thumbnail_url)
+    } catch { /* ignore */ }
   }
 
   useEffect(() => {
@@ -331,7 +349,7 @@ export default function BenefitsPage() {
     return (
       <div className="flex flex-col items-center text-center py-24 px-8">
         <span className="text-4xl mb-4">🌱</span>
-        <p className="font-serif text-lg text-brand-text mb-1.5">오늘의 한 걸음</p>
+        <p className="font-serif text-lg text-brand-text mb-1.5">이번 주, 우리 가족의 미션</p>
         <p className="text-sm text-brand-muted leading-relaxed mb-5">로그인하면 오늘 우리 가족이<br />뗄 수 있는 한 걸음을 알려드려요.</p>
         <Link href="/login" className="px-5 py-2.5 rounded-full bg-brand-green text-white text-sm font-semibold">
           로그인
@@ -342,129 +360,129 @@ export default function BenefitsPage() {
 
   // ── 파생 데이터 ──────────────────────────────────────────────────────────
   const tier = getTierProgress(user.points)
-  const currentIdx = TIER_CONFIG.reduce<number>((b, t, i) => (user.points >= t.threshold ? i : b), 0)
-  const nextSeason = tier.nextLabel ? tier.nextLabel.split(' ')[1] : null
-  const curSeason  = TIER_CONFIG[currentIdx].label.split(' ')[1]
 
   const todayDow  = new Date().getDay()
   const todayIdx  = todayDow === 0 ? 6 : todayDow - 1
   const weekDays  = stats?.weekDays ?? [false, false, false, false, false, false, false]
   const activeCnt = weekDays.filter(Boolean).length
 
-  const step = getTodayStep({
-    postedToday:     stats?.postedToday ?? false,
-    postedThisWeek:  stats?.postedThisWeek ?? false,
-    weekActiveToday: weekDays[todayIdx] ?? false,
-    lifeStage:       user.life_stage,
-  })
+  const missions   = stats ? getWeeklyMissions(stats) : []
+  const doneCnt    = missions.filter(m => m.done).length
+  const allDone    = missions.length > 0 && doneCnt === missions.length
+  const heroBanner = missions.find(m => !m.done) ?? null
 
-  // 곧 피어날 것 — 가장 가까운 미완료 뱃지 하나
-  const nextGoal = stats
-    ? BADGES
-        .filter(b => !b.stub)
-        .map(b => {
-          const value       = getBadgeValue(b.id, stats)
-          const achievedIdx = getAchievedStage(value, b.stages)
-          const nextIdx     = achievedIdx + 1
-          if (nextIdx >= b.stages.length) return null
-          const nextStage = b.stages[nextIdx]
-          return { badge: b, nextStage, gap: nextStage.threshold - value }
-        })
-        .filter((x): x is { badge: typeof BADGES[number]; nextStage: { label: string; threshold: number; desc: string }; gap: number } => x !== null)
-        .sort((a, b) => a.gap - b.gap)[0] ?? null
+  // 히어로 커버: event 미션 → 행사 이미지, write/comment 미션 → 최신 사진 게시글
+  const heroCover = heroBanner
+    ? heroBanner.id === 'event' && eventImage
+      ? { src: eventImage, href: '/events' }
+      : (heroBanner.id === 'write' || heroBanner.id === 'comment') && postImage
+      ? { src: postImage, href: '/community' }
+      : null
     : null
 
-  const rhythmText =
-    activeCnt === 0
-      ? '이번 주, 아직 첫 발자국 전이에요'
-      : `이번 주 ${activeCnt}일 함께했어요${(stats?.streakWeeks ?? 0) >= 1 ? ` · ${stats!.streakWeeks}주 연속 🔥` : ''}`
-
+  const streakStr = (stats?.streakWeeks ?? 0) >= 1 ? `🔥 ${stats!.streakWeeks}주 연속` : null
   const weekLabels = ['월', '화', '수', '목', '금', '토', '일']
 
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-6 bg-brand-bg min-h-screen">
 
-      {/* 상단 제목 */}
+      {/* 상단 제목 + 한 줄 동기 */}
       <div className="px-5 pt-5 pb-1">
         <h1 className="font-serif text-2xl font-bold text-brand-text">미션</h1>
-        <p className="text-sm text-brand-muted mt-1">오늘, 우리 가족의 한 걸음</p>
+        <p className="text-sm text-brand-muted mt-1">
+          이번 주, 우리 가족의 한 걸음
+          {streakStr && <span className="text-brand-green font-medium"> · {streakStr}</span>}
+        </p>
       </div>
 
       <div className="px-4 lg:px-6 py-5 space-y-6">
 
-        {/* ── ① 오늘의 한 걸음 (히어로) ──────────────────────────────────── */}
+        {/* ── ① 이번 주 다음 미션 (히어로 배너) ──────────────────────────── */}
         <section>
           {loading ? (
-            <div className="h-40 bg-brand-card rounded-2xl animate-pulse" />
-          ) : step.done ? (
-            <div className="bg-white rounded-2xl border border-brand-line px-5 py-6 text-center">
-              <span className="text-3xl leading-none">{step.emoji}</span>
-              <p className="font-serif text-lg text-brand-text mt-3 leading-snug">{step.headline}</p>
-              <Link href={step.href} className="inline-flex items-center gap-1 mt-3 text-sm font-medium text-brand-green">
-                {step.cta} <ArrowRight size={15} />
+            <div className="h-44 bg-brand-card rounded-3xl animate-pulse" />
+          ) : allDone ? (
+            <div className="bg-white rounded-3xl border border-brand-line px-6 py-10 text-center">
+              <span className="text-4xl leading-none">🎉</span>
+              <p className="font-serif text-lg text-brand-text mt-4 leading-snug">이번 주 미션을 모두 마쳤어요</p>
+              <Link href="/community" className="inline-flex items-center gap-1 mt-4 text-sm font-medium text-brand-green">
+                오늘의 피드 둘러보기 <ArrowRight size={15} />
               </Link>
             </div>
-          ) : (
-            <div className="bg-brand-green-light rounded-2xl border border-brand-green/30 px-5 py-6">
-              <p className="text-xs font-semibold text-brand-green-dark mb-3">오늘의 한 걸음</p>
-              <div className="flex items-start gap-3">
-                <span className="text-3xl leading-none flex-shrink-0">{step.emoji}</span>
-                <p className="flex-1 font-serif text-lg leading-snug text-brand-text">{step.headline}</p>
+          ) : heroBanner ? (
+            <div className="bg-white rounded-3xl border border-brand-line overflow-hidden">
+              {/* 커버 이미지 — 있을 때만 */}
+              {heroCover && (
+                <Link href={heroCover.href} className="block h-36 relative">
+                  <img src={heroCover.src} alt="" className="w-full h-full object-cover" />
+                </Link>
+              )}
+              <div className="p-6">
+                <p className="text-xs font-medium text-brand-green mb-2.5">오늘의 한 걸음</p>
+                <div className="flex items-start gap-2.5">
+                  {!heroCover && <span className="text-2xl leading-none flex-shrink-0">{heroBanner.emoji}</span>}
+                  <p className="flex-1 font-serif text-xl leading-snug text-brand-text">{heroBanner.title}</p>
+                </div>
+                {heroBanner.hint && <p className="text-sm text-brand-sub mt-2">{heroBanner.hint}</p>}
+                {heroBanner.target > 1 && (
+                  <div className="mt-3 flex items-center gap-2.5">
+                    <div className="flex-1 h-1.5 bg-brand-card rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-brand-green rounded-full transition-all" style={{ width: `${Math.min(100, (heroBanner.value / heroBanner.target) * 100)}%` }} />
+                    </div>
+                    <span className="text-xs text-brand-muted flex-shrink-0">{heroBanner.value}/{heroBanner.target}</span>
+                  </div>
+                )}
+                <div className="mt-5 flex items-center justify-between">
+                  {heroBanner.action.type === 'link' ? (
+                    <Link href={heroBanner.action.href} className="inline-flex items-center gap-1.5 pl-5 pr-4 py-2.5 rounded-full bg-brand-green text-white text-sm font-semibold hover:bg-brand-green-dark transition-colors">
+                      {heroBanner.cta} <ArrowRight size={15} />
+                    </Link>
+                  ) : (
+                    <button type="button" onClick={() => { if (heroBanner.action.type === 'sheet') { heroBanner.action.sheet === 'volunteer' ? setShowVol(true) : setShowDon(true) } }} className="inline-flex items-center gap-1.5 pl-5 pr-4 py-2.5 rounded-full bg-brand-green text-white text-sm font-semibold hover:bg-brand-green-dark transition-colors">
+                      {heroBanner.cta} <ArrowRight size={15} />
+                    </button>
+                  )}
+                  <span className="text-sm font-semibold text-brand-green">{heroBanner.reward}</span>
+                </div>
               </div>
-              <Link
-                href={step.href}
-                className="mt-5 w-full flex items-center justify-center gap-1.5 py-3 rounded-full bg-brand-green text-white text-sm font-semibold hover:bg-brand-green-dark transition-colors"
-              >
-                {step.cta} <ArrowRight size={16} />
-              </Link>
             </div>
-          )}
+          ) : null}
         </section>
 
-        {/* ── ② 나의 계절 (티어) — 탭하면 단계 기준 ──────────────────────── */}
+        {/* ── ② 이번 주 미션 (행동 목록) ─────────────────────────────────── */}
         <section>
-          <h2 className="text-sm font-semibold text-brand-text mb-2.5 px-1">나의 계절</h2>
-          <button
-            type="button"
-            onClick={() => setShowTier(true)}
-            className="w-full bg-white rounded-2xl border border-brand-line px-4 py-5 text-left hover:bg-brand-card transition-colors"
-          >
-            <div className="flex items-center px-1">
-              {TIER_CONFIG.map((t, i) => {
-                const emoji    = t.label.split(' ')[0]
-                const achieved = i <= currentIdx
-                const isCur    = i === currentIdx
-                return (
-                  <Fragment key={t.label}>
-                    {i > 0 && (
-                      <div className={`flex-1 h-0.5 mx-0.5 ${i <= currentIdx ? 'bg-brand-green' : 'bg-brand-line'}`} />
-                    )}
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-base transition-all ${
-                        isCur
-                          ? 'bg-brand-green ring-2 ring-brand-green/30 ring-offset-2 ring-offset-white scale-110'
-                          : achieved
-                            ? 'bg-brand-green-light'
-                            : 'bg-brand-card opacity-50'
-                      }`}
-                    >
-                      {emoji}
-                    </div>
-                  </Fragment>
-                )
-              })}
+          <div className="flex items-center justify-between mb-2.5 px-1">
+            <h2 className="text-sm font-semibold text-brand-text flex items-center gap-1.5">
+              <Sparkles size={15} className="text-brand-green" /> 이번 주 미션
+            </h2>
+            {!loading && <span className="text-xs text-brand-muted">{doneCnt}/{missions.length} 완료</span>}
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              <div className="h-14 bg-brand-card rounded-2xl animate-pulse" />
+              <div className="h-14 bg-brand-card rounded-2xl animate-pulse" />
+              <div className="h-14 bg-brand-card rounded-2xl animate-pulse" />
             </div>
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-xs text-brand-sub">
-                {nextSeason
-                  ? <>지금은 <span className="font-semibold text-brand-text">{curSeason}</span> 단계 · {nextSeason} 계절을 향해 자라는 중</>
-                  : <>가장 높은 단계, <span className="font-semibold text-brand-text">{curSeason}</span>에 닿았어요 🎉</>}
-              </p>
-              <span className="flex items-center text-[11px] text-brand-muted flex-shrink-0">
-                기준 <ChevronRight size={13} />
-              </span>
-            </div>
-          </button>
+          ) : (
+            <>
+              <div className="w-full bg-brand-card rounded-full h-1.5 mb-3">
+                <div
+                  className="bg-brand-green h-1.5 rounded-full transition-all"
+                  style={{ width: `${missions.length ? (doneCnt / missions.length) * 100 : 0}%` }}
+                />
+              </div>
+              <div className="space-y-2">
+                {missions.map(m => (
+                  <MissionRow
+                    key={m.id}
+                    m={m}
+                    onVolunteer={() => setShowVol(true)}
+                    onDonation={() => setShowDon(true)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
         {/* ── ③ 이번 주 리듬 ──────────────────────────────────────────────── */}
@@ -489,70 +507,70 @@ export default function BenefitsPage() {
                 )
               })}
             </div>
-            <p className="mt-3.5 text-center text-xs text-brand-sub">{rhythmText}</p>
+            <p className="mt-3.5 text-center text-xs text-brand-sub">
+              {activeCnt === 0 ? '이번 주, 아직 첫 발자국 전이에요' : `이번 주 ${activeCnt}일 함께했어요`}
+            </p>
           </div>
         </section>
 
-        {/* ── ④ 곧 피어날 것 (다음 목표 하나) ─────────────────────────────── */}
+        {/* ── ④ 보상으로 가는 길 (티어 + 사용처) ──────────────────────────── */}
         <section>
-          <h2 className="text-sm font-semibold text-brand-text mb-2.5 px-1">곧 피어날 것</h2>
-          {loading ? (
-            <div className="h-16 bg-brand-card rounded-2xl animate-pulse" />
-          ) : !nextGoal ? (
-            <p className="text-sm text-brand-muted text-center py-6">모든 뱃지를 피워냈어요 🎉</p>
-          ) : (
-            <Link
-              href="/mypage/badges"
-              className="flex items-center gap-3 bg-brand-green-light border border-brand-green/30 rounded-2xl px-4 py-4 hover:border-brand-green/50 transition-colors"
-            >
-              <span className="text-2xl leading-none flex-shrink-0">{nextGoal.badge.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-brand-text leading-snug">{nextGoal.badge.name}</p>
-                <p className="text-xs text-brand-sub leading-snug mt-0.5">
-                  {getNudgeText(nextGoal.badge.id, nextGoal.nextStage.label, nextGoal.gap)}
-                </p>
-              </div>
-              <ChevronRight size={16} className="text-brand-muted flex-shrink-0" />
-            </Link>
-          )}
-          <Link href="/mypage/badges" className="block text-center text-xs text-brand-muted mt-2.5 hover:text-brand-text transition-colors">
-            다른 목표와 뱃지 전체 보기 →
+          <h2 className="text-sm font-semibold text-brand-text mb-2.5 px-1">보상으로 가는 길</h2>
+          <button
+            type="button"
+            onClick={() => setShowTier(true)}
+            className="w-full bg-white rounded-2xl border border-brand-line px-4 py-4 text-left hover:bg-brand-card transition-colors"
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-sm font-medium text-brand-text">{tier.currentLabel} 단계</span>
+              <span className="flex items-center text-[11px] text-brand-muted">
+                {tier.nextLabel ? `다음 ${tier.nextLabel}` : '최고 단계'} <ChevronRight size={13} />
+              </span>
+            </div>
+            <div className="w-full bg-brand-card rounded-full h-2">
+              <div className="bg-brand-green h-2 rounded-full transition-all" style={{ width: `${tier.progress}%` }} />
+            </div>
+            <p className="text-[11px] text-brand-muted mt-2">
+              {tier.nextLabel
+                ? <>{tier.remaining.toLocaleString()}P 더 모으면 다음 계절로 자라나요</>
+                : <>가장 높은 계절에 닿았어요 🎉</>}
+            </p>
+          </button>
+          <Link
+            href="/store"
+            className="mt-2 flex items-center gap-3 bg-white rounded-2xl border border-brand-line px-4 py-3.5 hover:bg-brand-card transition-colors"
+          >
+            <span className="text-xl leading-none flex-shrink-0">🎁</span>
+            <span className="flex-1 text-sm font-medium text-brand-text">모은 마음, 어디에 쓸까요?</span>
+            <ChevronRight size={16} className="text-brand-muted flex-shrink-0" />
           </Link>
         </section>
 
-        {/* ── ⑤ 손으로 남기기 (봉사·후원) ─────────────────────────────────── */}
-        <section>
-          <h2 className="text-sm font-semibold text-brand-text mb-2.5 px-1">손으로 남기기</h2>
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setShowVol(true)}
-              className="w-full flex items-center gap-3 bg-white rounded-2xl border border-brand-line px-4 py-3.5 hover:bg-brand-card transition-colors text-left"
-            >
-              <span className="text-xl leading-none flex-shrink-0">🤝</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-brand-text">봉사 시간 기록하기</p>
-                <p className="text-xs text-brand-muted mt-0.5">봉사한 시간만큼 발자국이 남아요 · 시간당 5P</p>
-              </div>
-              <ChevronRight size={16} className="text-brand-muted flex-shrink-0" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowDon(true)}
-              className="w-full flex items-center gap-3 bg-white rounded-2xl border border-brand-line px-4 py-3.5 hover:bg-brand-card transition-colors text-left"
-            >
-              <span className="text-xl leading-none flex-shrink-0">💝</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-brand-text">후원 기록하기</p>
-                <p className="text-xs text-brand-muted mt-0.5">나눔을 실천한 마음도 발자국이 돼요 · 1회 +15P</p>
-              </div>
-              <ChevronRight size={16} className="text-brand-muted flex-shrink-0" />
-            </button>
-          </div>
+        {/* ── ⑤ 더 깊이 (장기 도전 / 발자취) ──────────────────────────────── */}
+        <section className="space-y-2 pt-1">
+          <Link
+            href="/benefits/missions"
+            className="flex items-center gap-3 bg-white rounded-2xl border border-brand-line px-4 py-3.5 hover:bg-brand-card transition-colors"
+          >
+            <span className="text-xl leading-none flex-shrink-0">🏅</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-brand-text">장기 도전 과제</p>
+              <p className="text-xs text-brand-muted mt-0.5">한 주를 넘어, 차근차근 피워낼 목표들</p>
+            </div>
+            <ChevronRight size={16} className="text-brand-muted flex-shrink-0" />
+          </Link>
+          <Link
+            href="/mypage"
+            className="flex items-center gap-3 bg-white rounded-2xl border border-brand-line px-4 py-3.5 hover:bg-brand-card transition-colors"
+          >
+            <span className="text-xl leading-none flex-shrink-0">🌳</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-brand-text">성장 발자취 돌아보기</p>
+              <p className="text-xs text-brand-muted mt-0.5">우리 가족이 걸어온 길</p>
+            </div>
+            <ChevronRight size={16} className="text-brand-muted flex-shrink-0" />
+          </Link>
         </section>
-
-        {/* ── ⑥ 마음이 쌓이는 규칙 (접이식) ───────────────────────────────── */}
-        <PointRules />
       </div>
 
       {/* 티어 상세 시트 */}
