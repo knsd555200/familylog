@@ -6,7 +6,7 @@ import { communityPosts } from '@/data/community'
 import { feedPosts } from '@/data/feed'
 import type { CommunityPost, FeedPost } from '@/types/post'
 import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
-import { getDbCommunityPosts, getDbFeedPosts, getMyLikes, toggleLike, formatTime } from '@/lib/api/posts'
+import { getDbCommunityPosts, getDbFeedPosts, getFamilyFeedPosts, getMyLikes, toggleLike, formatTime } from '@/lib/api/posts'
 import { getEventPosts, type EventPost } from '@/lib/api/events'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -220,7 +220,8 @@ export default function CommunityPage() {
   const { user, isLoading } = useAuth()
   const [feedTab, setFeedTab] = useState<FeedTab>('이야기')
   const [sortMode, setSortMode] = useState<SortMode>('latest') // 기본 최신순, 인기순은 옵션
-  const [familyMemberIds, setFamilyMemberIds] = useState<Set<string>>(new Set())
+  // 우리 가족 피드 — family_id 기준으로 별도 로드
+  const [familyPosts, setFamilyPosts] = useState<CardPost[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [popularPosts, setPopularPosts] = useState<CardPost[]>(() => feedCache?.popular ?? [])
@@ -330,19 +331,15 @@ export default function CommunityPage() {
       .finally(() => setEventsLoading(false))
   }, [])
 
-  // 가족 구성원 ID 조회 — family_id 변경 시 갱신
+  // 가족 피드 로드 — family_id 변경 시 갱신
   useEffect(() => {
     if (!user?.family_id) {
-      setFamilyMemberIds(new Set())
+      setFamilyPosts([])
       return
     }
-    supabase
-      .from('users')
-      .select('id')
-      .eq('family_id', user.family_id)
-      .then(({ data }) => {
-        setFamilyMemberIds(new Set((data ?? []).map((u: { id: string }) => u.id)))
-      })
+    getFamilyFeedPosts(user.family_id).then(posts => {
+      setFamilyPosts(posts.map(feedToCard))
+    })
   }, [user?.family_id])
 
   // 토스트 타이머 언마운트 정리
@@ -426,13 +423,12 @@ export default function CommunityPage() {
   // 'latest'는 그대로, 'popular'만 점수순으로 재정렬한다.
   // 정렬은 로드된 likes/comments 기준(낙관적 likeCounts 미사용) — 좋아요 시 카드가 튀지 않게.
   const filtered = useMemo(() => {
-    const base = feedTab === '우리 가족'
-      ? popularPosts.filter(p => p.authorId != null && familyMemberIds.has(p.authorId))
-      : popularPosts
+    // 우리 가족 탭은 getFamilyFeedPosts로 가져온 별도 목록 사용
+    const base = feedTab === '우리 가족' ? familyPosts : popularPosts
     return sortMode === 'popular'
       ? [...base].sort(makePopularComparator())
       : base
-  }, [feedTab, popularPosts, familyMemberIds, sortMode])
+  }, [feedTab, popularPosts, familyPosts, sortMode])
 
   const activePost = useMemo((): FeedPost | null => {
     if (!activeCommentPostId) return null

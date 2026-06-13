@@ -154,6 +154,40 @@ export async function getDbCommunityPosts(): Promise<CommunityPost[]> {
   )
 }
 
+// 가족 피드 조회 — 가족 멤버 글 + visibility='family' 글을 합산해서 반환
+export async function getFamilyFeedPosts(familyId: string): Promise<FeedPost[]> {
+  // 가족 구성원 user_id 목록 조회
+  const { data: members } = await supabase
+    .from('family_members')
+    .select('user_id')
+    .eq('family_id', familyId)
+    .eq('status', 'active')
+
+  const memberIds = (members ?? [])
+    .map((m: { user_id: string | null }) => m.user_id)
+    .filter((id): id is string => id !== null)
+
+  if (memberIds.length === 0) return []
+
+  // 멤버가 쓴 모든 글(public/members/family) + 가족 공개(family) 글을 OR로 가져옴
+  // Supabase REST에서 OR 조건: or() 사용
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*, users(nickname, avatar_url, bio, role, tier)')
+    .neq('post_type', 'event')
+    .is('deleted_at', null)
+    .or(
+      `author_id.in.(${memberIds.join(',')}),and(visibility.eq.family,family_id.eq.${familyId})`
+    )
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (error || !data) return []
+
+  const commentCounts = await fetchCommentCountsByPostId(data.map(p => p.id))
+  return data.map(p => dbToFeedPost({ ...p, comment_count: commentCounts[p.id] ?? 0 }))
+}
+
 export async function createPost(params: {
   post_type: 'feed' | 'community' | 'event'
   title: string
