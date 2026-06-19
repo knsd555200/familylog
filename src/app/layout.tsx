@@ -15,15 +15,15 @@ export const metadata: Metadata = {
   description: '가정들이 일상을 기록하고 성장 궤적을 쌓는 커뮤니티 웹 플랫폼.',
   keywords: '패밀로그, 가정, 부부, 자녀교육, 가족커뮤니티',
   icons: {
-    icon: '/familog_logo_가로.png',
-    shortcut: '/familog_logo_가로.png',
-    apple: '/familog_logo_가로.png',
+    icon: '/logo-symbol.png',
+    shortcut: '/logo-symbol.png',
+    apple: '/logo-symbol.png',
   },
   openGraph: {
     title: '패밀로그',
     description: '우리 가정의 이야기를 남기는 곳',
     type: 'website',
-    images: [{ url: '/familog_logo_가로.png', width: 512, height: 512, alt: '패밀로그 로고' }],
+    images: [{ url: '/logo-symbol.png', width: 512, height: 512, alt: '패밀로그 로고' }],
   },
 }
 

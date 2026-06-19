@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { X, Send, Heart, Camera } from 'lucide-react'
+import AuthSheet from '@/components/auth/AuthSheet'
 import type { FeedPost, Comment as MockComment } from '@/types/post'
 import { communityPosts } from '@/data/community'
 import { getComments, createComment, deleteComment, getMyCommentLikes, toggleCommentLike, type DbComment } from '@/lib/api/posts'
@@ -52,8 +52,11 @@ function getVisibleTopLevel(comments: DbComment[]): DbComment[] {
 }
 
 export default function CommentDrawer({ post, onClose, onCommentCountChange, postType }: Props) {
-  const router = useRouter()
   const { user } = useAuth()
+  // 비회원 댓글 게이트 — 토스트의 로그인 버튼이 페이지 이동 대신 인증 시트를 띄운다
+  const [showAuth, setShowAuth] = useState(false)
+  const handleAuthClose = useCallback(() => setShowAuth(false), [])
+  const handleAuthSuccess = useCallback(() => setShowAuth(false), [])
   const [dbComments, setDbComments] = useState<DbComment[]>([])
   const [loading, setLoading] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -398,7 +401,7 @@ export default function CommentDrawer({ post, onClose, onCommentCountChange, pos
               <p className="text-sm text-brand-text">댓글을 달려면 로그인이 필요해요</p>
               <button
                 type="button"
-                onClick={() => router.push('/login')}
+                onClick={() => setShowAuth(true)}
                 className="flex-shrink-0 rounded-full bg-brand-green px-3.5 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
               >
                 로그인하기
@@ -486,6 +489,11 @@ export default function CommentDrawer({ post, onClose, onCommentCountChange, pos
             </div>
           </div>
         </div>
+
+        {/* 비회원 댓글 게이트 인증 시트 — 드로어(z-80) 내부 최상단에 마운트 */}
+        {showAuth && (
+          <AuthSheet initialTab="signup" onClose={handleAuthClose} onSuccess={handleAuthSuccess} />
+        )}
       </div>
     </div>
   )

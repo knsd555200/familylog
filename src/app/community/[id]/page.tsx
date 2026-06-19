@@ -1,15 +1,17 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
+import AuthSheet from '@/components/auth/AuthSheet'
 import { communityPosts } from '@/data/community'
 import type { CommunityPost } from '@/types/post'
-import { Heart, MessageSquare, Bookmark, Send, ChevronLeft, Lock, X } from 'lucide-react'
+import { Heart, MessageSquare, Bookmark, Send, ChevronLeft, ChevronRight, Lock, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { toggleLike, getComments, createComment, DbComment } from '@/lib/api/posts'
+import { toggleLike, getComments, createComment, DbComment, getPostVisibility } from '@/lib/api/posts'
 import PostMenu from '@/components/community/PostMenu'
 import ShareMenu from '@/components/community/ShareMenu'
+import { MILONE_SYSTEM_USER_ID } from '@/lib/constants'
 
 const CATEGORY_LABEL: Record<string, string> = {
   daily: '일상',
@@ -40,6 +42,7 @@ export default function CommunityDetailPage() {
   const { isLoggedIn, user } = useAuth()
   const [post, setPost] = useState<CommunityPost | null>(null)
   const [loading, setLoading] = useState(true)
+  const [notFoundReason, setNotFoundReason] = useState<'not_found' | 'private' | 'family' | null>(null)
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
   const [saved, setSaved] = useState(false)
@@ -48,6 +51,11 @@ export default function CommunityDetailPage() {
   const [dbComments, setDbComments] = useState<DbComment[]>([])
   const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [detailImgIdx, setDetailImgIdx] = useState(0)
+  // 비회원 액션(좋아요·댓글) 게이트 — 페이지 이동 대신 인증 시트를 띄운다
+  const [showAuth, setShowAuth] = useState(false)
+  const handleAuthClose = useCallback(() => setShowAuth(false), [])
+  const handleAuthSuccess = useCallback(() => setShowAuth(false), [])
 
   useEffect(() => {
     const id = params.id as string
@@ -65,8 +73,22 @@ export default function CommunityDetailPage() {
       .select('*, users(nickname, avatar_url, bio)')
       .eq('id', id)
       .single()
-      .then(({ data, error }) => {
-        if (error || !data) { setLoading(false); return }
+      .then(async ({ data, error }) => {
+        if (error || !data) {
+          const visibility = await getPostVisibility(id)
+          setNotFoundReason(
+            visibility === 'private' ? 'private'
+            : visibility === 'family' ? 'family'
+            : 'not_found'
+          )
+          setLoading(false)
+          return
+        }
+        // 행사 글은 전용 상세 페이지에서만 렌더링 — 일반 게시물로 뜨지 않도록 리다이렉트
+        if (data.post_type === 'event') {
+          router.replace(`/events/${id}`)
+          return
+        }
         setPost({
           id: data.id,
           category: data.category,
@@ -83,7 +105,7 @@ export default function CommunityDetailPage() {
           mediaUrls: Array.isArray(data.media_urls) && data.media_urls.length > 0
             ? data.media_urls
             : undefined,
-          visibility: data.visibility === 'members' ? 'member' : 'public',
+          visibility: (data.visibility ?? 'public') as 'public' | 'family' | 'private',
           commentList: [],
           authorId: data.author_id,
         })
@@ -112,7 +134,7 @@ export default function CommunityDetailPage() {
   const handleLike = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     const user = session?.user ?? null
-    if (!user) { router.push('/login'); return }
+    if (!user) { setShowAuth(true); return }
     const isLiked = liked
     setLiked(!isLiked)
     setLikeCount(prev => prev + (isLiked ? -1 : 1))
@@ -123,7 +145,7 @@ export default function CommunityDetailPage() {
     if (!comment.trim()) return
     const { data: { session } } = await supabase.auth.getSession()
     const user = session?.user ?? null
-    if (!user) { router.push('/login'); return }
+    if (!user) { setShowAuth(true); return }
 
     setSubmitting(true)
     const result = await createComment({
@@ -146,15 +168,26 @@ export default function CommunityDetailPage() {
   }
 
   if (!post) {
+    const notFoundConfig = {
+      private: { icon: '🔒', title: '비공개 글이에요', desc: '작성자만 볼 수 있는 글이에요.' },
+      family:  { icon: '👨‍👩‍👧', title: '가족만 볼 수 있는 글이에요', desc: '가족 공간 멤버에게만 공개된 글이에요.' },
+      not_found: { icon: '🔍', title: '글을 찾을 수 없어요', desc: '삭제되었거나 존재하지 않는 글이에요.' },
+    }
+    const cfg = notFoundConfig[notFoundReason ?? 'not_found']
     return (
-      <div className="p-6 text-center">
-        <p>게시글을 찾을 수 없어요.</p>
-        <Link href="/community" className="text-brand-blue text-sm">목록으로</Link>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center gap-3">
+        <span className="text-5xl">{cfg.icon}</span>
+        <p className="font-medium text-base">{cfg.title}</p>
+        <p className="text-sm text-brand-muted">{cfg.desc}</p>
+        <Link href="/community" className="mt-2 text-brand-blue text-sm">목록으로 돌아가기</Link>
       </div>
     )
   }
 
-  const isLocked = post.visibility === 'member' && !isLoggedIn
+  const isLocked = false
+
+  // 밀로네 시스템 계정 글 판별 — boolean 단순 비교라 매 렌더 새 참조 생성 없음(리렌더 영향 없음)
+  const isMilone = post.authorId === MILONE_SYSTEM_USER_ID
 
   // mock 댓글 + DB 댓글 합치기 (mock 게시글이면 mock 댓글만)
   const isMockPost = post.id.startsWith('c')
@@ -166,7 +199,7 @@ export default function CommunityDetailPage() {
 
   return (
     <div className="max-w-2xl mx-auto pb-32 lg:pb-6">
-      <div className="hidden lg:flex items-center justify-between px-6 py-4 border-b border-brand-line">
+      <div className="flex items-center justify-between px-4 lg:px-6 py-3 border-b border-brand-line">
         <button onClick={() => router.back()} className="flex items-center gap-1 text-brand-sub text-sm">
           <ChevronLeft size={18} /> 뒤로
         </button>
@@ -185,21 +218,17 @@ export default function CommunityDetailPage() {
             <div className="font-medium text-sm">{post.author}</div>
             <div className="text-[11px] text-brand-muted">{post.status} · {post.time}</div>
           </div>
-          <PostMenu
-            postId={post.id}
-            authorId={post.authorId}
-            isMock={isMockPost}
-            onDeleted={() => router.push('/community')}
-            className="lg:hidden flex-shrink-0"
-          />
-          <button className="px-3 py-1.5 border border-brand-line rounded-full text-xs font-medium text-brand-sub hidden sm:inline-flex">팔로우</button>
+          {/* 밀로네는 family_id가 없는 빈 계정 — 팔로우(프로필 이동성) 제거, 이름/아바타는 일반 텍스트·이미지로만 표시 */}
+          {!isMilone && (
+            <button className="px-3 py-1.5 border border-brand-line rounded-full text-xs font-medium text-brand-sub hidden sm:inline-flex">팔로우</button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium">{getCategoryLabel(post.category)}</span>
-          {post.visibility === 'member' && (
-            <span className="text-[10px] px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full font-medium flex items-center gap-1">
-              <Lock size={9} /> 멤버 전용
+          {post.visibility === 'private' && (
+            <span className="text-[10px] px-2 py-0.5 bg-brand-card text-brand-muted rounded-full font-medium flex items-center gap-1">
+              <Lock size={9} /> 나만 보기
             </span>
           )}
         </div>
@@ -220,40 +249,100 @@ export default function CommunityDetailPage() {
               {post.content}
             </div>
             {(() => {
-              const image = post.mediaUrls?.[0]
-                ?? (post.thumbnail ? post.thumbnail.replace('200/200', '800/500') : null)
-              if (!image) return null
+              const images: string[] = post.mediaUrls && post.mediaUrls.length > 0
+                ? post.mediaUrls
+                : post.thumbnail
+                  ? [post.thumbnail.replace('200/200', '800/500')]
+                  : []
+              if (images.length === 0) return null
+              const idx = Math.min(detailImgIdx, images.length - 1)
               return (
                 <>
-                  {/* 이미지 인라인 표시 */}
-                  <button
-                    type="button"
-                    onClick={() => setLightboxIndex(0)}
-                    className="block w-full mb-5 rounded-2xl overflow-hidden focus:outline-none"
-                    aria-label="이미지 확대"
-                  >
-                    <img src={image} alt="첨부 이미지" className="w-full object-cover max-h-[400px]" />
-                  </button>
+                  {/* 이미지 캐러셀 */}
+                  <div className="relative w-full mb-5 rounded-2xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setLightboxIndex(idx)}
+                      className="block w-full focus:outline-none"
+                      aria-label="이미지 확대"
+                    >
+                      <img src={images[idx]} alt={`첨부 이미지 ${idx + 1}`} className="w-full object-cover max-h-[400px]" />
+                    </button>
+
+                    {images.length > 1 && (
+                      <>
+                        {/* 인디케이터 */}
+                        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex gap-1 pointer-events-none">
+                          {images.map((_, i) => (
+                            <div key={i} className={`h-1 rounded-full transition-all ${i === idx ? 'w-5 bg-white' : 'w-2.5 bg-white/50'}`} />
+                          ))}
+                        </div>
+                        {/* 이전 */}
+                        {idx > 0 && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setDetailImgIdx(idx - 1) }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center text-white"
+                          >
+                            <ChevronLeft size={18} />
+                          </button>
+                        )}
+                        {/* 다음 */}
+                        {idx < images.length - 1 && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setDetailImgIdx(idx + 1) }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center text-white"
+                          >
+                            <ChevronRight size={18} />
+                          </button>
+                        )}
+                        {/* 장수 표시 */}
+                        <div className="absolute bottom-2 right-3 text-[11px] text-white bg-black/40 rounded-full px-2 py-0.5 pointer-events-none">
+                          {idx + 1} / {images.length}
+                        </div>
+                      </>
+                    )}
+                  </div>
 
                   {/* 라이트박스 */}
                   {lightboxIndex !== null && (
                     <div
-                      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-14"
+                      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
                       onClick={() => setLightboxIndex(null)}
                     >
                       <button
-                        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-colors"
+                        className="absolute top-safe-top top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center z-10"
                         onClick={e => { e.stopPropagation(); setLightboxIndex(null) }}
                         aria-label="닫기"
                       >
                         <X size={20} />
                       </button>
                       <img
-                        src={image}
-                        alt="첨부 이미지"
-                        className="max-w-full max-h-full object-contain rounded-lg"
+                        src={images[lightboxIndex]}
+                        alt={`첨부 이미지 ${lightboxIndex + 1}`}
+                        className="max-w-full max-h-full object-contain"
                         onClick={e => e.stopPropagation()}
                       />
+                      {images.length > 1 && lightboxIndex > 0 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex - 1) }}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-white"
+                        >
+                          <ChevronLeft size={20} />
+                        </button>
+                      )}
+                      {images.length > 1 && lightboxIndex < images.length - 1 && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1) }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-white"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      )}
+                      {images.length > 1 && (
+                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/70 text-sm bg-black/40 rounded-full px-3 py-0.5">
+                          {lightboxIndex + 1} / {images.length}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
@@ -407,6 +496,11 @@ export default function CommunityDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 비회원 액션 게이트 인증 시트 — 가입탭 우선 */}
+      {showAuth && (
+        <AuthSheet initialTab="signup" onClose={handleAuthClose} onSuccess={handleAuthSuccess} />
       )}
     </div>
   )

@@ -1,5 +1,6 @@
 'use client'
-import { usePathname } from 'next/navigation'
+import { useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import BottomNav from './BottomNav'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -15,7 +16,19 @@ function isChatDetail(pathname: string) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { showOnboarding, setShowOnboarding } = useAuth()
+  const router = useRouter()
+  const { user, status, showOnboarding, setShowOnboarding } = useAuth()
+
+  // 프로필 미완성 가드: 로그인했지만 nickname이 없는 사용자(=온보딩 미완료)는
+  // 어느 경로로 들어오든 /signup으로 보낸다. 이메일 인증 후 콜백을 거치지 않고
+  // 곧바로 로그인 상태가 되는 경우(Supabase redirect 설정 등)에도 프로필 설정을 보장.
+  useEffect(() => {
+    if (status !== 'authenticated' || !user) return
+    // 온보딩 완료 sentinel: nickname (트리거는 nickname을 null로 두므로 온보딩에서만 채워짐)
+    if (user.nickname.trim()) return
+    if (pathname === '/signup' || pathname === '/login') return
+    router.replace('/signup')
+  }, [status, user, pathname, router])
 
   const hideNav = NO_NAV_PATHS.some(p => pathname.startsWith(p)) || isChatDetail(pathname)
 

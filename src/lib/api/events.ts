@@ -86,6 +86,38 @@ export async function getEventPosts(): Promise<EventPost[]> {
   return (data ?? []).map(rowToEventPost)
 }
 
+// ─── 관리용 행사 목록 조회 ────────────────────────────────────────────────────
+
+/**
+ * 행사 관리 페이지용 조회.
+ * - isAdmin=true(수퍼관리자): 전체 행사
+ * - isAdmin=false(행사관리자): authorId 본인이 올린 행사만
+ * visibility 무관(비공개 포함), 마감된 행사도 포함해 최신순 반환.
+ */
+export async function getManagedEventPosts(
+  authorId: string,
+  isAdmin: boolean,
+): Promise<EventPost[]> {
+  let query = supabase
+    .from('posts')
+    .select('*, users(nickname, avatar_url)')
+    .eq('post_type', 'event')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+
+  // 수퍼관리자가 아니면 본인이 올린 행사로 제한
+  if (!isAdmin) query = query.eq('author_id', authorId)
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('[getManagedEventPosts] 조회 실패:', error.message)
+    return []
+  }
+
+  return (data ?? []).map(rowToEventPost)
+}
+
 // ─── 단일 행사 글 조회 ────────────────────────────────────────────────────────
 
 /**

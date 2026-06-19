@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 
+const ONBOARDING_ENABLED = false // 미션 온보딩 팝업. v26: 평천하 대기 자산이라 지금은 끔. 나중에 미션 단계에서 true로.
+
 type AuthStatus = 'initializing' | 'authenticated' | 'unauthenticated'
 
 interface User {
@@ -50,7 +52,8 @@ const AuthContext = createContext<AuthContextType>({
 async function buildUser(authUser: { id: string; email?: string; user_metadata?: Record<string, string> }, accessToken: string): Promise<User> {
   const fallback: User = {
     id: authUser.id,
-    nickname: authUser.user_metadata?.nickname || '새 멤버',
+    // 완료 판정 sentinel이 nickname이므로 미온보딩(DB null) 상태를 '새 멤버'로 가리지 않고 빈 값으로 정직하게 둔다
+    nickname: authUser.user_metadata?.nickname || '',
     name: authUser.user_metadata?.full_name || '',
     email: authUser.email || '',
     avatar: authUser.user_metadata?.avatar_url || '',
@@ -164,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === 'SIGNED_IN' && mounted) {
           const hideUntil = localStorage.getItem('familog_onboarding_hide_until')
           const shouldHide = hideUntil && Date.now() < Number(hideUntil)
-          if (!shouldHide && window.location.pathname !== '/signup') {
+          if (ONBOARDING_ENABLED && !shouldHide && window.location.pathname !== '/signup') {
             setShowOnboarding(true)
           }
         }

@@ -22,7 +22,7 @@ export interface CommunityPost {
   comments: number
   thumbnail?: string
   mediaUrls?: string[]
-  visibility: 'public' | 'member'
+  visibility: 'public' | 'family' | 'private'
   commentList: Comment[]
   authorId?: string
   // 정렬·상대시간 표시용 원시 타임스탬프 (ISO). mock은 합성값

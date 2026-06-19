@@ -18,7 +18,7 @@ export default function SplashScreen({ onDone }: { onDone: () => void }) {
       </div>
 
       <Image
-        src="/familog logo full(1).png"
+        src="/logo-slogan.png"
         alt="패밀로그"
         width={320}
         height={96}

@@ -39,11 +39,72 @@ async function fetchCommentCountsByPostId(postIds: string[]): Promise<Record<str
   return counts
 }
 
+// 피드 카드에 인라인으로 보여줄 댓글 미리보기 1줄 단위
+export interface CommentPreview {
+  id: string
+  postId: string
+  author: string
+  avatar: string
+  content: string
+  likeCount: number
+  createdAt: string
+}
+
+// 여러 글의 댓글 미리보기를 한 번의 쿼리로 가져와 글별로 선별 (글마다 개별 쿼리 방지)
+//  · mode 'best'   → 좋아요 많은 순 (전체 피드: 대표 반응 1개)
+//  · mode 'recent' → 최신 순 (가족 피드: 최근 대화 흐름)
+// 반환은 표시 순서(오래된→최신)로 정렬해서 자연스럽게 읽히게 함
+export async function getCommentPreviews(
+  postIds: string[],
+  mode: 'best' | 'recent',
+  perPost: number,
+): Promise<Record<string, CommentPreview[]>> {
+  const validIds = postIds.filter(isUUID)
+  if (validIds.length === 0) return {}
+
+  const { data, error } = await supabase
+    .from('comments')
+    .select('id, post_id, content, like_count, created_at, author:users(nickname, avatar_url)')
+    .in('post_id', validIds)
+    .is('deleted_at', null)
+
+  if (error || !data) return {}
+
+  // 글별로 묶기
+  const byPost: Record<string, any[]> = {}
+  for (const c of data) {
+    (byPost[c.post_id] ??= []).push(c)
+  }
+
+  const result: Record<string, CommentPreview[]> = {}
+  for (const [postId, comments] of Object.entries(byPost)) {
+    const sorted = mode === 'best'
+      ? [...comments].sort((a, b) => (b.like_count ?? 0) - (a.like_count ?? 0))
+      : [...comments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    // 선별 후 표시용으로 시간 오름차순 재정렬 (대화 읽기 순서)
+    const picked = sorted.slice(0, perPost).sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+
+    result[postId] = picked.map((c: any) => ({
+      id: c.id,
+      postId: c.post_id,
+      author: c.author?.nickname ?? '패밀로그 회원',
+      avatar: c.author?.avatar_url ?? '',
+      content: c.content,
+      likeCount: c.like_count ?? 0,
+      createdAt: c.created_at,
+    }))
+  }
+  return result
+}
+
 function dbToFeedPost(p: any): FeedPost {
   return {
     id: p.id,
     type: p.media_urls?.length > 0 ? 'image' : 'text',
-    isMemberOnly: p.visibility === 'members',
+    isMemberOnly: false,
     author: {
       nickname: p.users?.nickname ?? '패밀로그 회원',
       avatar: p.users?.avatar_url ?? 'https://i.pravatar.cc/100?img=30',
@@ -77,7 +138,7 @@ function dbToCommunityPost(p: any): CommunityPost {
     comments: p.comment_count ?? 0,
     thumbnail: p.thumbnail_url ?? undefined,
     mediaUrls: Array.isArray(p.media_urls) && p.media_urls.length > 0 ? p.media_urls : undefined,
-    visibility: p.visibility === 'members' ? 'member' : 'public' as 'public' | 'member',
+    visibility: (p.visibility ?? 'public') as 'public' | 'family' | 'private',
     commentList: [],
     authorId: p.author_id,
     createdAt: p.created_at,
@@ -88,8 +149,7 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
   const { data, error } = await supabase
     .from('posts')
     .select('*, users(nickname, avatar_url, bio, role, tier)')
-    // members 글도 피드에 포함 — FeedCard에서 비로그인 시 블러·잠금 처리
-    .in('visibility', ['public', 'members'])
+    .eq('visibility', 'public')
     .neq('post_type', 'event')
     .is('deleted_at', null)
     .order('is_pinned', { ascending: false })
@@ -109,9 +169,12 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
       if (daysSinceCreated <= 7) return true
     }
 
-    // 핵심 가정 → 24시간 기본 노출 보장, 이후 점수로 생존
+    // 신규 공개글 → 24시간 기본 노출 보장 (모든 유저)
+    if (daysSinceCreated <= 1) return true
+
+    // 핵심 가정 → 3일 기본 노출 보장, 이후 점수로 생존
     if (p.users?.tier === 'fruit' || p.users?.tier === 'beacon') {
-      if (daysSinceCreated <= 1) return true
+      if (daysSinceCreated <= 3) return true
     }
 
     // 모든 공개글 → 좋아요 1개 이상이면 노출 (기간 제한 없음)
@@ -169,15 +232,14 @@ export async function getFamilyFeedPosts(familyId: string): Promise<FeedPost[]> 
 
   if (memberIds.length === 0) return []
 
-  // 멤버가 쓴 모든 글(public/members/family) + 가족 공개(family) 글을 OR로 가져옴
-  // Supabase REST에서 OR 조건: or() 사용
+  // 멤버가 쓴 public/family 글 + 가족 공개(family) 글 (private는 본인만 볼 수 있으므로 제외)
   const { data, error } = await supabase
     .from('posts')
     .select('*, users(nickname, avatar_url, bio, role, tier)')
     .neq('post_type', 'event')
     .is('deleted_at', null)
     .or(
-      `author_id.in.(${memberIds.join(',')}),and(visibility.eq.family,family_id.eq.${familyId})`
+      `and(author_id.in.(${memberIds.join(',')}),visibility.neq.private),and(visibility.eq.family,family_id.eq.${familyId})`
     )
     .order('created_at', { ascending: false })
     .limit(100)
@@ -193,7 +255,7 @@ export async function createPost(params: {
   title: string
   content: string
   category: string
-  visibility: 'public' | 'members' | 'private'
+  visibility: 'public' | 'family' | 'private'
   media_urls?: string[]
   thumbnail_url?: string
   // 행사 글 전용 필드 (post_type='event'일 때만 사용)
@@ -216,11 +278,27 @@ export async function createPost(params: {
     params.post_type === 'event'     ? 'event' :
     'short'
 
+  // visibility='family'일 때 family_id 필요 — 없으면 에러 반환 (자동생성 제거)
+  let familyId: string | null = null
+  if (params.visibility === 'family') {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('family_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profile?.family_id) {
+      familyId = profile.family_id
+    } else {
+      return { success: false, error: 'NO_FAMILY' }
+    }
+  }
+
   const { data, error } = await supabase
     .from('posts')
     .insert({
       author_id: user.id,
-      family_id: null,
+      family_id: familyId,
       post_type: dbPostType,
       category: params.category,
       title: params.title,
@@ -245,7 +323,7 @@ export async function createPost(params: {
   if (error) return { success: false, error: error.message }
 
   // 게시글 작성 포인트 적립 — 공개범위별 차등 (하루 1회 제한은 addMerit 내부에서 처리)
-  const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, members: 5, private: 0 }
+  const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, family: 0, private: 0 }
   const postPoints = POST_VISIBILITY_POINTS[params.visibility] ?? 10
   if (postPoints > 0) {
     await addMerit({
@@ -312,7 +390,7 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
   // 작성자 본인 삭제 + 작성 24시간 이내일 때만 포인트 회수
   const ageMs = Date.now() - new Date(post.created_at).getTime()
   if (isAuthor && ageMs < 24 * 60 * 60 * 1000) {
-    const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, members: 5, private: 0 }
+    const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, family: 0, private: 0 }
     const revokePoints = POST_VISIBILITY_POINTS[post.visibility] ?? 10
     if (revokePoints > 0) {
       await addMerit({
@@ -337,9 +415,15 @@ export async function updatePost(
     title: string
     content: string
     category: string
-    visibility: 'public' | 'members' | 'private'
+    visibility: 'public' | 'family' | 'private'
     media_urls?: string[]
     thumbnail_url?: string | null
+    // 행사 글 전용 필드
+    event_start_at?: string | null
+    event_end_at?: string | null
+    event_location?: string | null
+    event_max_participants?: number | null
+    event_merit_reward?: number | null
   }
 ): Promise<{ success: boolean; error?: string }> {
   if (!isUUID(postId)) return { success: false, error: '수정할 수 없는 글입니다' }
@@ -356,7 +440,32 @@ export async function updatePost(
     .maybeSingle()
 
   if (fetchError || !post) return { success: false, error: '글을 찾을 수 없어요' }
-  if (post.author_id !== user.id) return { success: false, error: '수정 권한이 없어요' }
+
+  // 작성자 본인 또는 수퍼관리자(admin)만 수정 가능 — admin은 모든 글 수정 권한 보유
+  if (post.author_id !== user.id) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    if (profile?.role !== 'admin') return { success: false, error: '수정 권한이 없어요' }
+  }
+
+  // visibility='family'로 바꿀 때 family_id 필요 — 없으면 에러 반환 (자동생성 제거)
+  let familyId: string | null | undefined = undefined
+  if (params.visibility === 'family') {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('family_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profile?.family_id) {
+      familyId = profile.family_id
+    } else {
+      return { success: false, error: 'NO_FAMILY' }
+    }
+  }
 
   const { error } = await supabase
     .from('posts')
@@ -365,8 +474,14 @@ export async function updatePost(
       content: params.content,
       category: params.category,
       visibility: params.visibility,
+      ...(familyId !== undefined && { family_id: familyId }),
       ...(params.media_urls !== undefined && { media_urls: params.media_urls }),
       ...(params.thumbnail_url !== undefined && { thumbnail_url: params.thumbnail_url }),
+      ...(params.event_start_at !== undefined && { event_start_at: params.event_start_at }),
+      ...(params.event_end_at !== undefined && { event_end_at: params.event_end_at }),
+      ...(params.event_location !== undefined && { event_location: params.event_location }),
+      ...(params.event_max_participants !== undefined && { event_max_participants: params.event_max_participants }),
+      ...(params.event_merit_reward !== undefined && { event_merit_reward: params.event_merit_reward }),
       updated_at: new Date().toISOString(),
     })
     .eq('id', postId)
@@ -669,6 +784,20 @@ export async function markAllNotificationsRead(): Promise<void> {
     .update({ is_read: true })
     .eq('user_id', user.id)
     .eq('is_read', false)
+}
+
+// RLS를 우회해 visibility만 반환하는 RPC 호출
+// Supabase SQL: CREATE OR REPLACE FUNCTION get_post_visibility(post_id uuid)
+//   RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+//   SELECT visibility FROM posts WHERE id = post_id AND deleted_at IS NULL; $$;
+export async function getPostVisibility(
+  postId: string
+): Promise<'public' | 'family' | 'private' | null> {
+  if (!isUUID(postId)) return null
+
+  const { data, error } = await supabase.rpc('get_post_visibility', { post_id: postId })
+  if (error || data == null) return null
+  return data as 'public' | 'family' | 'private'
 }
 
 export async function getUnreadNotificationCount(): Promise<number> {

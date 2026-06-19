@@ -1,12 +1,21 @@
 'use client'
-import { useState, useRef, Suspense } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Lock, Globe, Users, ImagePlus, X, Calendar, Camera } from 'lucide-react'
+import { ArrowLeft, Globe, Users, EyeOff, ImagePlus, X, Calendar, Camera, ChevronDown, Check } from 'lucide-react'
 import { createPost } from '@/lib/api/posts'
 import { uploadImages } from '@/lib/upload'
 import { useAuth } from '@/context/AuthContext'
+import CreateFamilySheet from '@/components/family/CreateFamilySheet'
 
 const MAX_IMAGES = 3
+
+// 공개 범위 메타 — 칩/시트에서 공용 (아이콘·라벨·설명)
+const VISIBILITY_META = {
+  public:  { Icon: Globe,  label: '전체 공개', desc: '누구나 볼 수 있어요' },
+  family:  { Icon: Users,  label: '가족만 보기', desc: '우리 가족만 볼 수 있어요' },
+  private: { Icon: EyeOff, label: '나만 보기', desc: '지금은 나만 봐요. 먼 훗날 가족에게 전할 수 있어요' },
+} as const
+type Visibility = keyof typeof VISIBILITY_META
 
 // 공통 텍스트 input / number input 스타일
 const INPUT_CLS =
@@ -30,20 +39,33 @@ function CommunityWriteForm() {
     ? (categoryFromUrl as 'daily' | 'concern' | 'sharing')
     : 'daily'
 
-  // 현재 로그인 유저가 관리자인지 여부
-  const isAdmin = user?.role === 'admin'
+  // 현재 로그인 유저의 권한 — 수퍼관리자 / 행사관리자
+  const isAdmin        = user?.role === 'admin'
+  const isEventManager = user?.role === 'event_manager'
+  // 행사 글을 만들 수 있는 권한 (둘 중 하나면 가능)
+  const canCreateEvent = isAdmin || isEventManager
 
-  // ── 글 유형 (관리자만 전환 가능) ──────────────────────────────────────────
+  // ── 글 유형 (권한자만 전환 가능) ──────────────────────────────────────────
+  //  · 행사관리자는 행사 글만 작성 가능 → 진입 시 행사 모드로 고정
   const [isEvent, setIsEvent] = useState(false)
+  useEffect(() => {
+    if (isEventManager) setIsEvent(true)
+  }, [isEventManager])
 
   // ── 공통 필드 ─────────────────────────────────────────────────────────────
   const [title,      setTitle]      = useState('')
   const [content,    setContent]    = useState('')
-  const [visibility, setVisibility] = useState<'public' | 'members' | 'private'>(isEventVerify ? 'public' : 'public')
+  const [visibility, setVisibility] = useState<Visibility>('public')
+  const [showVisibilitySheet, setShowVisibilitySheet] = useState(false)
   const [imageFiles,    setImageFiles]    = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
+  const [showNoFamilyModal, setShowNoFamilyModal] = useState(false)
+  const [modalError, setModalError] = useState('')
+  // 나만 보기로 저장 후 가족 만들기 시트 — 저장된 글 id 보관해 생성 후 그 글로 이동
+  const [showCreateSheet, setShowCreateSheet] = useState(false)
+  const [savedPostId, setSavedPostId] = useState<string | null>(null)
 
   // ── 행사 전용 필드 ────────────────────────────────────────────────────────
   const [eventStartAt,         setEventStartAt]         = useState('')
@@ -93,24 +115,40 @@ function CommunityWriteForm() {
     }
   }
 
-  // ── 제출 처리 ─────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!title.trim())   return setError('제목을 입력해주세요')
-    if (!content.trim()) return setError('내용을 입력해주세요')
-    if (isEventVerify && imageFiles.length === 0) return setError('인증 사진을 첨부해주세요')
-    if (isEvent && !eventStartAt) return setError('행사 시작일시를 입력해주세요')
+  // ── 가족만 보기 선택 시 — 가족 없으면 모달 표시 ─────────────────────────────
+  const handleFamilyVisibilityClick = () => {
+    if (!user?.family_id) {
+      setModalError('')
+      setShowNoFamilyModal(true)
+    } else {
+      setVisibility('family')
+    }
+  }
+
+  // ── 제출 처리 ──────────────────────────────────────────────────────────────
+  //  · visibilityOverride: 모달에서 private로 강제 저장 시 사용
+  //  · opts.redirect=false: 저장만 하고 페이지 이동 보류(가족 만들기 시트로 이어갈 때)
+  const handleSubmit = async (
+    visibilityOverride?: Visibility,
+    opts?: { redirect?: boolean }
+  ): Promise<{ ok: boolean; id?: string }> => {
+    const finalVisibility = visibilityOverride ?? visibility
+
+    if (!title.trim())   { setError('제목을 입력해주세요'); return { ok: false } }
+    if (!content.trim()) { setError('내용을 입력해주세요'); return { ok: false } }
+    if (isEventVerify && imageFiles.length === 0) { setError('인증 사진을 첨부해주세요'); return { ok: false } }
+    if (isEvent && !eventStartAt) { setError('행사 시작일시를 입력해주세요'); return { ok: false } }
 
     setLoading(true)
     setError('')
 
     try {
-      // 이미지 업로드
       let media_urls: string[] = []
       if (imageFiles.length > 0) {
         const { urls, error: uploadError } = await uploadImages(imageFiles)
         if (uploadError) {
           setError(uploadError)
-          return
+          return { ok: false }
         }
         media_urls = urls
       }
@@ -138,24 +176,43 @@ function CommunityWriteForm() {
               content:             content.trim(),
               category:            isEventVerify ? 'practice' : writeCategory,
               verify_merit_reward: isEventVerify ? eventMeritFromUrl : undefined,
-              visibility,
+              visibility:          finalVisibility,
               media_urls,
               thumbnail_url: media_urls[0] ?? undefined,
             }
       )
 
       if (result.success) {
-        // replace로 히스토리에서 write 페이지를 제거 — 뒤로 가기 시 write로 돌아오지 않음
-        router.replace(
-          isEventVerify ? `/events/${eventId}` : result.id ? `/community/${result.id}` : '/community'
-        )
+        if (opts?.redirect !== false) {
+          router.replace(
+            isEventVerify ? `/events/${eventId}` : result.id ? `/community/${result.id}` : '/community'
+          )
+        }
+        return { ok: true, id: result.id }
       } else {
         setError(result.error ?? '저장에 실패했어요. 다시 시도해주세요.')
+        return { ok: false }
       }
     } catch {
       setError('저장에 실패했어요. 다시 시도해주세요.')
+      return { ok: false }
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ── 모달: 나만 보기로 저장하고 → 그 자리에서 가족 만들기 시트 ────────────────
+  const handleSavePrivateAndCreateFamily = async () => {
+    if (!title.trim() || !content.trim()) {
+      setModalError('제목과 내용을 입력한 후 진행할 수 있어요')
+      return
+    }
+    setShowNoFamilyModal(false)
+    // private로 저장하되 페이지 이동은 보류 → 저장된 글 id 보관 후 가족 만들기 시트
+    const { ok, id } = await handleSubmit('private', { redirect: false })
+    if (ok) {
+      setSavedPostId(id ?? null)
+      setShowCreateSheet(true)
     }
   }
 
@@ -168,16 +225,25 @@ function CommunityWriteForm() {
           <ArrowLeft size={18} />
           <span className="text-sm">취소</span>
         </button>
-        <span className="font-medium text-sm">
-          {isEvent ? '행사 글 쓰기' : '글 쓰기'}
-        </span>
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !title.trim() || !content.trim()}
-          className="text-sm font-medium text-brand-green disabled:text-brand-muted transition-colors"
-        >
-          {loading ? '저장 중...' : '게시'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 공개 범위 칩 — 행사·인증 글이 아닐 때만. 누르면 시트로 선택 */}
+          {!isEvent && !isEventVerify && (
+            <button
+              onClick={() => setShowVisibilitySheet(true)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-brand-card rounded-full text-xs font-medium text-brand-sub"
+            >
+              {(() => { const { Icon, label } = VISIBILITY_META[visibility]; return <><Icon size={13} /><span>{label}</span></> })()}
+              <ChevronDown size={12} />
+            </button>
+          )}
+          <button
+            onClick={() => handleSubmit()}
+            disabled={loading || !title.trim() || !content.trim()}
+            className="text-sm font-medium text-brand-green disabled:text-brand-muted transition-colors"
+          >
+            {loading ? '저장 중...' : '게시'}
+          </button>
+        </div>
       </div>
 
       <div className="px-4 lg:px-6 py-5 space-y-5">
@@ -193,19 +259,23 @@ function CommunityWriteForm() {
           </div>
         )}
 
-        {/* ── 관리자 전용: 글 유형 토글 ──────────────────────────────────── */}
-        {isAdmin && (
+        {/* ── 권한자 전용: 글 유형 토글 ──────────────────────────────────── */}
+        {/*  · 수퍼관리자: 일반 글 / 행사 글 자유 전환                         */}
+        {/*  · 행사관리자: 행사 글만 가능 → 일반 글 버튼 숨김(행사 모드 고정)  */}
+        {canCreateEvent && (
           <div>
             <label className="text-xs text-brand-sub mb-2 block">글 유형</label>
             <div className="flex gap-2">
-              <button
-                onClick={() => handleToggleEventMode(false)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  !isEvent ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
-                }`}
-              >
-                일반 글
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleToggleEventMode(false)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    !isEvent ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
+                  }`}
+                >
+                  일반 글
+                </button>
+              )}
               <button
                 onClick={() => handleToggleEventMode(true)}
                 className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -214,39 +284,6 @@ function CommunityWriteForm() {
               >
                 <Calendar size={12} />
                 행사 글
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── 공개 범위 (행사 글·인증 글이면 숨김 — 'public'으로 자동 고정) ─────── */}
-        {!isEvent && !isEventVerify && (
-          <div>
-            <label className="text-xs text-brand-sub mb-2 block">공개 범위</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setVisibility('public')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  visibility === 'public' ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
-                }`}
-              >
-                <Globe size={12} /> 전체 공개
-              </button>
-              <button
-                onClick={() => setVisibility('members')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  visibility === 'members' ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
-                }`}
-              >
-                <Users size={12} /> 멤버 공개
-              </button>
-              <button
-                onClick={() => setVisibility('private')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  visibility === 'private' ? 'bg-brand-text text-white' : 'bg-brand-card text-brand-sub'
-                }`}
-              >
-                <Lock size={12} /> 가족만
               </button>
             </div>
           </div>
@@ -398,6 +435,94 @@ function CommunityWriteForm() {
 
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
+
+      {/* ── 공개 범위 선택 시트 ─────────────────────────────────────────────── */}
+      {showVisibilitySheet && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowVisibilitySheet(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl lg:rounded-3xl px-5 pt-5 pb-10 lg:pb-6">
+            <p className="font-semibold text-brand-text mb-4 px-1">공개 범위</p>
+            <div className="space-y-1.5">
+              {(['public', 'family', 'private'] as const).map(v => {
+                const { Icon, label, desc } = VISIBILITY_META[v]
+                const active = visibility === v
+                return (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setShowVisibilitySheet(false)
+                      // 가족만 보기는 가족 유무 분기(없으면 안내 모달) — 기존 핸들러 재사용
+                      if (v === 'family') handleFamilyVisibilityClick()
+                      else setVisibility(v)
+                    }}
+                    className={`w-full flex items-start gap-3 px-3 py-3 rounded-2xl text-left transition-colors ${
+                      active ? 'bg-brand-green-light' : 'hover:bg-brand-card'
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${active ? 'bg-white' : 'bg-brand-card'}`}>
+                      <Icon size={16} className={active ? 'text-brand-green' : 'text-brand-sub'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${active ? 'text-brand-green-dark' : 'text-brand-text'}`}>{label}</p>
+                      <p className="text-xs text-brand-muted mt-0.5 leading-relaxed">{desc}</p>
+                    </div>
+                    {active && <Check size={16} className="text-brand-green flex-shrink-0 mt-2" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 가족 없을 때 안내 모달 ──────────────────────────────────────────── */}
+      {showNoFamilyModal && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowNoFamilyModal(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl lg:rounded-3xl px-6 pt-6 pb-10 lg:pb-8 space-y-4">
+            <div>
+              <p className="font-semibold text-brand-text mb-1">가족만 보기는 가족 공간이 필요해요</p>
+              <p className="text-sm text-brand-sub">가족 공간을 만들거나 초대를 받아야 사용할 수 있어요.</p>
+            </div>
+
+            {modalError && <p className="text-xs text-red-500">{modalError}</p>}
+
+            <div className="space-y-2.5">
+              <button
+                onClick={handleSavePrivateAndCreateFamily}
+                disabled={loading}
+                className="w-full py-3 bg-brand-green text-white text-sm font-semibold rounded-2xl disabled:opacity-50 transition-opacity"
+              >
+                {loading ? '저장 중…' : '나만 보기로 저장하고 가족 만들기'}
+              </button>
+              <button
+                onClick={() => { setVisibility('private'); setShowNoFamilyModal(false) }}
+                className="w-full py-3 bg-brand-card text-brand-text text-sm font-medium rounded-2xl"
+              >
+                나만 보기로 바꾸고 계속 쓰기
+              </button>
+              <button
+                onClick={() => setShowNoFamilyModal(false)}
+                className="w-full py-3 text-brand-muted text-sm"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 나만 보기로 저장 직후 — 그 자리에서 가족 생성 → 저장한 글로 이동 */}
+      {showCreateSheet && (
+        <CreateFamilySheet
+          onClose={() => setShowCreateSheet(false)}
+          onCreated={() => {
+            setShowCreateSheet(false)
+            router.replace(savedPostId ? `/community/${savedPostId}` : '/community')
+          }}
+        />
+      )}
+
       <style>{`@keyframes writeSlideUp { from { opacity: 0; transform: translateY(40px) } to { opacity: 1; transform: translateY(0) } }`}</style>
     </div>
   )

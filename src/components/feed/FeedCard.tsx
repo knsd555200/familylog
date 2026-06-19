@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Heart, MessageCircle, Share2, Bookmark, Play, Lock, Volume2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FeedPost } from '@/types/post'
+import { MILONE_SYSTEM_USER_ID } from '@/lib/constants'
 
 const CATEGORY_LABEL: Record<string, string> = {
   daily: '일상',
@@ -34,6 +35,8 @@ export default function FeedCard({
   const [imgIdx, setImgIdx] = useState(0)
 
   const isLocked = post.isMemberOnly && !isLoggedIn
+  // 밀로네 시스템 계정 글 판별 — boolean 단순 비교라 매 렌더 새 참조가 생기지 않음(리렌더 영향 없음)
+  const isMilone = post.authorId === MILONE_SYSTEM_USER_ID
   const images = post.type === 'video' && post.videoThumb ? [post.videoThumb] : post.images
   const displayImg = images[imgIdx] || images[0]
 
@@ -143,9 +146,12 @@ export default function FeedCard({
               <div className="text-white font-medium text-sm leading-tight">{post.author.nickname}</div>
               <div className="text-white/70 text-[11px]">{post.author.status}</div>
             </div>
-            <button onClick={(e) => e.stopPropagation()} className="ml-2 px-3 py-1 border border-white/50 rounded-full text-white text-[11px] font-medium">
-              팔로우
-            </button>
+            {/* 밀로네는 family_id가 없는 빈 계정 — 팔로우(프로필 이동성) 제거하고 이름/아바타는 일반 텍스트·이미지로만 표시 */}
+            {!isMilone && (
+              <button onClick={(e) => e.stopPropagation()} className="ml-2 px-3 py-1 border border-white/50 rounded-full text-white text-[11px] font-medium">
+                팔로우
+              </button>
+            )}
           </div>
           <h3 className="text-white font-medium text-base mb-1.5 leading-snug line-clamp-2">{post.title}</h3>
           <p className="text-white/85 text-[13px] leading-relaxed line-clamp-2">{post.description}</p>

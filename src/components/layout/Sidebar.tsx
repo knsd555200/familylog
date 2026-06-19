@@ -1,8 +1,11 @@
 'use client'
+import { useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Home, Target, User, Bell, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import AuthSheet from '@/components/auth/AuthSheet'
 
 const tabs = [
   { href: '/community', label: '홈', icon: Home },
@@ -14,11 +17,15 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout, isLoggedIn } = useAuth()
+  // 로그인 모달 표시 여부 — 페이지 이동 대신 시트로 인증 폼을 띄운다
+  const [showAuth, setShowAuth] = useState(false)
+  const handleAuthClose = useCallback(() => setShowAuth(false), [])
+  const handleAuthSuccess = useCallback(() => setShowAuth(false), [])
 
   return (
     <div className="flex flex-col h-full px-4 py-6">
       <Link href="/community" className="flex items-center gap-2.5 mb-8 px-2">
-        <img src="/familog_logo_가로.png" alt="패밀로그" className="h-9 w-auto object-contain" />
+        <img src="/logo-wordmark.png" alt="패밀로그" className="h-14 w-auto object-contain" />
       </Link>
       <nav className="flex-1 space-y-1">
         {tabs.map(({ href, label, icon: Icon }) => {
@@ -50,12 +57,18 @@ export default function Sidebar() {
             </button>
           </div>
         ) : (
-          <Link href="/login" className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-brand-sub hover:bg-brand-card">
+          <button onClick={() => setShowAuth(true)} className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm text-brand-sub hover:bg-brand-card">
             <LogIn size={18} />
             로그인
-          </Link>
+          </button>
         )}
       </div>
+
+      {/* 로그인/회원가입 시트 — 사이드바 래퍼(z-20 컨텍스트)를 벗어나도록 body에 포털 렌더 */}
+      {showAuth && createPortal(
+        <AuthSheet initialTab="login" onClose={handleAuthClose} onSuccess={handleAuthSuccess} />,
+        document.body
+      )}
     </div>
   )
 }

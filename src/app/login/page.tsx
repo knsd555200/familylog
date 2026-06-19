@@ -1,94 +1,40 @@
 'use client'
-import { useRef, useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { consumePendingInvite } from '@/lib/pendingInvite'
 import { ChevronLeft } from 'lucide-react'
-
-type Tab = 'login' | 'signup'
+import AuthForm, { AuthTab } from '@/components/auth/AuthForm'
 
 export default function LoginPage() {
   const router = useRouter()
   const { isLoggedIn, isLoading } = useAuth()
+  const [initialTab, setInitialTab] = useState<AuthTab>('login')
 
+  // 진입 시 ?tab=signup이면 회원가입 탭으로 시작 (모델하우스 CTA가 이 쿼리로 보냄)
   useEffect(() => {
-    if (!isLoading && isLoggedIn && window.location.pathname !== '/community') {
-      router.replace('/community')
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t === 'signup' || t === 'login') setInitialTab(t)
+  }, [])
+
+  // 로그인된 상태에서: 초대 링크로 들어온 기존 유저면 합류 페이지로, 그 외엔 /community로
+  // (가입 직후 온보딩 이동은 onSuccess에서 별도 처리)
+  useEffect(() => {
+    if (!isLoading && isLoggedIn) {
+      const inviteCode = consumePendingInvite()
+      if (inviteCode) {
+        router.replace(`/invite/${inviteCode}`)
+      } else if (window.location.pathname !== '/community') {
+        router.replace('/community')
+      }
     }
   }, [isLoggedIn, isLoading, router])
 
-  const [tab, setTab] = useState<Tab>('login')
-
-  // 로그인
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const passwordRef = useRef<HTMLInputElement>(null)
-
-  // 회원가입
-  const [signupEmail, setSignupEmail] = useState('')
-  const [signupPassword, setSignupPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [signupError, setSignupError] = useState('')
-  const [signupLoading, setSignupLoading] = useState(false)
-  const [signupDone, setSignupDone] = useState(false)
-  const signupPasswordRef = useRef<HTMLInputElement>(null)
-  const signupConfirmRef = useRef<HTMLInputElement>(null)
-
-  const handleEmailLogin = async () => {
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError('이메일 또는 비밀번호가 틀렸어요')
-      setLoading(false)
-    } else {
-      router.push('/community')
-    }
-  }
-
-  const toSignupErrorMessage = (message: string) => {
-    if (message.includes('Unable to validate email address: invalid format')) {
-      return '올바른 이메일 형식이 아니에요'
-    }
-    if (message.includes('Password should be at least')) {
-      return '비밀번호는 8자 이상이어야 해요'
-    }
-    if (message.includes('User already registered')) {
-      return '이미 가입된 이메일이에요'
-    }
-    return '회원가입에 실패했어요. 다시 시도해주세요'
-  }
-
-  const handleSignUp = async () => {
-    setSignupError('')
-    if (signupPassword !== confirmPassword) {
-      setSignupError('비밀번호가 일치하지 않아요')
-      return
-    }
-    setSignupLoading(true)
-    const { error } = await supabase.auth.signUp({
-      email: signupEmail,
-      password: signupPassword,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    if (error) {
-      setSignupError(toSignupErrorMessage(error.message))
-      setSignupLoading(false)
-    } else {
-      setSignupDone(true)
-    }
-  }
-
-  const switchTab = (t: Tab) => {
-    setTab(t)
-    setError('')
-    setSignupError('')
-  }
+  // 인증 성공 후처리: 가입은 프로필 설정으로, 로그인은 위 isLoggedIn effect가 담당
+  const handleSuccess = useCallback((kind: AuthTab) => {
+    if (kind === 'signup') router.replace('/signup')
+  }, [router])
 
   return (
     <div className="relative min-h-dvh flex flex-col bg-brand-bg">
@@ -102,142 +48,11 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="text-center mb-2">
             <Link href="/community" className="inline-block">
-              <img src="/familog logo full(1).png" alt="패밀로그 로고" className="w-96 max-w-[90vw] h-auto mx-auto object-contain" />
+              <img src="/logo-slogan.png" alt="패밀로그 로고" className="w-96 max-w-[90vw] h-auto mx-auto object-contain" />
             </Link>
           </div>
 
-          {/* 탭 */}
-          <div className="flex bg-brand-card rounded-xl p-1 mb-6">
-            <button
-              onClick={() => switchTab('login')}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'login' ? 'bg-white text-brand-text shadow-sm' : 'text-brand-muted'}`}
-            >
-              로그인
-            </button>
-            <button
-              onClick={() => switchTab('signup')}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'signup' ? 'bg-white text-brand-text shadow-sm' : 'text-brand-muted'}`}
-            >
-              회원가입
-            </button>
-          </div>
-
-          {/* 로그인 탭 */}
-          {tab === 'login' && (
-            <div className="space-y-2">
-              <input
-                type="email"
-                placeholder="이메일"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    passwordRef.current?.focus()
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white border border-brand-line rounded-xl text-sm outline-none focus:border-brand-green"
-              />
-              <input
-                ref={passwordRef}
-                type="password"
-                placeholder="비밀번호"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleEmailLogin()
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white border border-brand-line rounded-xl text-sm outline-none focus:border-brand-green"
-              />
-              {error && <p className="text-xs text-red-500">{error}</p>}
-              <button
-                onClick={handleEmailLogin}
-                disabled={loading}
-                className="w-full py-3 bg-brand-green text-white rounded-xl text-sm font-medium disabled:opacity-50"
-              >
-                {loading ? '로그인 중...' : '로그인'}
-              </button>
-            </div>
-          )}
-
-          {/* 회원가입 탭 */}
-          {tab === 'signup' && signupDone && (
-            <div className="mt-6 space-y-4">
-              <div className="p-4 bg-brand-green-light rounded-xl text-center">
-                <p className="text-sm text-brand-green font-medium leading-relaxed">
-                  인증 메일을 보냈어요. 이메일을 확인하고 링크를 클릭하면 가입이 완료돼요.
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-brand-sub mb-2">이미 가입하셨나요?</p>
-                <button
-                  type="button"
-                  onClick={() => setTab('login')}
-                  className="text-sm text-brand-green font-medium underline"
-                >
-                  로그인하기
-                </button>
-              </div>
-            </div>
-          )}
-
-          {tab === 'signup' && !signupDone && (
-            <div className="mt-4 space-y-2">
-              <input
-                type="email"
-                placeholder="이메일"
-                value={signupEmail}
-                onChange={e => setSignupEmail(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    signupPasswordRef.current?.focus()
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white border border-brand-line rounded-xl text-sm outline-none focus:border-brand-green"
-              />
-              <input
-                ref={signupPasswordRef}
-                type="password"
-                placeholder="비밀번호"
-                value={signupPassword}
-                onChange={e => setSignupPassword(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    signupConfirmRef.current?.focus()
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white border border-brand-line rounded-xl text-sm outline-none focus:border-brand-green"
-              />
-              <input
-                ref={signupConfirmRef}
-                type="password"
-                placeholder="비밀번호 확인"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleSignUp()
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white border border-brand-line rounded-xl text-sm outline-none focus:border-brand-green"
-              />
-              {signupError && <p className="text-xs text-red-500">{signupError}</p>}
-              <button
-                onClick={handleSignUp}
-                disabled={signupLoading}
-                className="w-full py-3 bg-brand-green text-white rounded-xl text-sm font-medium disabled:opacity-50"
-              >
-                {signupLoading ? '가입 중...' : '이메일로 가입하기'}
-              </button>
-            </div>
-          )}
-
+          <AuthForm initialTab={initialTab} onSuccess={handleSuccess} />
         </div>
       </div>
     </div>

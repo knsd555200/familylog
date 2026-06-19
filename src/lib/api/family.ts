@@ -40,6 +40,20 @@ export async function createFamily(
 
   const familyId = familyRow.id
 
+  // 1-1) 밀로네 시스템 계정 명의의 환영 글 1건 생성 — 가족당 1회(가족 생성 직후 단 한 번 실행되는 지점)
+  // posts INSERT RLS가 auth.uid()=author_id를 요구해 직접 insert는 막힘 → SECURITY DEFINER RPC로 우회(문구·사진은 RPC 내부 보유)
+  // 실패해도 가족 생성 흐름은 막지 않도록 try/catch로 격리하고 로그만 남긴다
+  try {
+    // 클라이언트는 가족 id와 이름만 넘기고, 작성자/문구/미디어는 RPC가 처리
+    const { error: welcomeErr } = await supabase.rpc('create_welcome_post', {
+      p_family_id: familyId,
+      p_family_name: familyName,
+    })
+    if (welcomeErr) console.error('[createFamily] 환영 글 생성 실패(무시):', welcomeErr.message)
+  } catch (e) {
+    console.error('[createFamily] 환영 글 생성 예외(무시):', e)
+  }
+
   // 2) family_members에 owner로 등록
   const { error: memberErr } = await supabase
     .from('family_members')
@@ -47,7 +61,7 @@ export async function createFamily(
       family_id: familyId,
       user_id: userId,
       is_account_user: true,
-      role: 'owner',
+      role: 'parent',
       status: 'active',
       invited_by: userId,
     })
@@ -183,13 +197,14 @@ export async function joinFamilyByCode(
   }
 
   // 합류 처리 (3단계 — 정합성 묶기)
+  // role: 배우자 제한 트리거 삭제 후 전원 'parent' (역할 구분 없는 평평한 모델)
   const { error: memberErr } = await supabase
     .from('family_members')
     .insert({
       family_id: invite.family_id,
       user_id: userId,
       is_account_user: true,
-      role: 'member',
+      role: 'parent',
       status: 'active',
       invited_by: invite.created_by,
     })
@@ -214,4 +229,216 @@ export async function joinFamilyByCode(
     .eq('id', invite.id)
 
   return { familyName, error: null }
+}
+
+// 가족 이름만 가볍게 조회 — 환영 문구용(통계 전체 끌어오는 getFamilyStats와 분리)
+export async function getFamilyName(familyId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('families')
+    .select('name')
+    .eq('id', familyId)
+    .maybeSingle() // 결과 없을 때 406 방지
+  return data?.name ?? null
+}
+
+// 가족 공간 상단 정체성 영역 전용 조회
+// 가족 구성 박스용 멤버 목록(본인 포함, 아바타·닉네임만). getFamilyStats와 달리 통계 없이 경량.
+export async function getFamilyIdentity(
+  familyId: string,
+): Promise<{
+  name: string
+  seq: number | null
+  welcomeMessage: string | null
+  description: string | null
+  createdAt: string
+  members: { userId: string; nickname: string; avatar: string | null }[]
+} | null> {
+  const { data } = await supabase
+    .from('families')
+    .select('name, seq, welcome_message, description, created_at')
+    .eq('id', familyId)
+    .maybeSingle() // 결과 없을 때 406 방지
+  if (!data) return null
+
+  // 활성 멤버 조회 — user_id/invited_by FK 모호성 방지를 위해 FK 이름 명시
+  const { data: members } = await supabase
+    .from('family_members')
+    .select('user_id, users!family_members_user_id_fkey(nickname, avatar_url)')
+    .eq('family_id', familyId)
+    .eq('status', 'active')
+
+  const memberList = (members ?? [])
+    .filter(m => m.user_id && m.users)
+    .map(m => ({
+      userId:   m.user_id as string,
+      nickname: (m.users as any).nickname  ?? '가족',
+      avatar:   (m.users as any).avatar_url ?? null,
+    }))
+
+  return {
+    name:           data.name,
+    seq:            data.seq ?? null,
+    welcomeMessage: (data as any).welcome_message ?? null,
+    description:    data.description ?? null,
+    createdAt:      data.created_at,
+    members:        memberList,
+  }
+}
+
+// 가족 정체성(가정명·환영 문구·소개) 수정. RLS member update 정책으로 active 멤버만 통과.
+export async function updateFamilyIdentity(
+  familyId: string,
+  name: string,
+  welcomeMessage: string | null,
+  description: string | null,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('families')
+    .update({
+      name,
+      welcome_message: welcomeMessage && welcomeMessage.trim() ? welcomeMessage : null,
+      description: description && description.trim() ? description : null,
+    })
+    .eq('id', familyId)
+  return { error: error ? error.message : null }
+}
+
+// 활성 가족 멤버 수만 가볍게 조회 — 초대 배너 자가소멸 판정용
+export async function getFamilyMemberCount(familyId: string): Promise<number> {
+  const { count } = await supabase
+    .from('family_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('family_id', familyId)
+    .eq('status', 'active')
+
+  return count ?? 0
+}
+
+// ── 가족 합산 통계 ─────────────────────────────────────────────────────────────
+
+export interface FamilyMemberStats {
+  userId: string
+  nickname: string
+  avatar: string | null
+  points: number
+}
+
+export interface FamilyStats {
+  familyId: string
+  familyName: string
+  familyCreatedAt: string
+  familyDays: number
+  members: FamilyMemberStats[]
+  totalPoints: number
+}
+
+// 가족 생성일·멤버별 포인트를 단일 쿼리로 취득해 합산 통계 반환
+export async function getFamilyStats(familyId: string): Promise<FamilyStats | null> {
+  // families 기본 정보 조회
+  const { data: family } = await supabase
+    .from('families')
+    .select('id, name, created_at')
+    .eq('id', familyId)
+    .single()
+
+  if (!family) return null
+
+  // family_members + users 조인으로 멤버 닉네임·아바타·포인트 한 번에 취득
+  // users로 가는 FK가 2개(user_id, invited_by)라 임베드가 모호 → user_id FK 명시 (PGRST201 방지)
+  const { data: members } = await supabase
+    .from('family_members')
+    .select('user_id, users!family_members_user_id_fkey(nickname, avatar_url, merit_total)')
+    .eq('family_id', familyId)
+    .eq('status', 'active')
+
+  const memberStats: FamilyMemberStats[] = (members ?? [])
+    .filter(m => m.user_id && m.users)
+    .map(m => ({
+      userId:   m.user_id as string,
+      nickname: (m.users as any).nickname     ?? '가족',
+      avatar:   (m.users as any).avatar_url    ?? null,
+      points:   (m.users as any).merit_total   ?? 0,
+    }))
+
+  const totalPoints = memberStats.reduce((s, m) => s + m.points, 0)
+  // 가족 생성일 기준 경과 일수 계산
+  const familyDays = Math.max(0, Math.floor((Date.now() - new Date(family.created_at).getTime()) / 86400000))
+
+  return {
+    familyId:       family.id,
+    familyName:     family.name,
+    familyCreatedAt: family.created_at,
+    familyDays,
+    members: memberStats,
+    totalPoints,
+  }
+}
+
+// ── 가족 이야기 탭 포스트 ──────────────────────────────────────────────────────
+
+export interface FamilyPostItem {
+  id: string
+  title: string
+  content: string | null
+  media_urls: string[] | null
+  thumbnail_url: string | null
+  like_count: number
+  comment_count: number
+  created_at: string
+  visibility: string
+  author_id: string
+  authorNickname: string
+  authorAvatar: string | null
+}
+
+// 가족 구성원 전체 글 조회 — offset 기반 페이지네이션, count: 'exact'로 총 건수 동시 반환
+export async function getFamilyPosts(
+  familyId: string,
+  offset: number = 0,
+  limit:  number = 10,
+): Promise<{ posts: FamilyPostItem[]; totalCount: number }> {
+  // 가족 활성 멤버 user_id 목록 조회
+  const { data: members } = await supabase
+    .from('family_members')
+    .select('user_id')
+    .eq('family_id', familyId)
+    .eq('status', 'active')
+
+  const memberIds = (members ?? [])
+    .map(m => m.user_id)
+    .filter((id): id is string => id !== null)
+
+  if (memberIds.length === 0) return { posts: [], totalCount: 0 }
+
+  // 멤버 글 + 작성자 닉네임·아바타 조인, count: 'exact'로 총 건수 동시 취득
+  const { data, count } = await supabase
+    .from('posts')
+    .select(
+      'id, title, content, media_urls, thumbnail_url, like_count, comment_count, created_at, visibility, author_id, users(nickname, avatar_url)',
+      { count: 'exact' },
+    )
+    .in('author_id', memberIds)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (!data) return { posts: [], totalCount: 0 }
+
+  return {
+    posts: data.map(p => ({
+      id:             p.id,
+      title:          p.title,
+      content:        p.content        ?? null,
+      media_urls:     Array.isArray(p.media_urls) ? p.media_urls : null,
+      thumbnail_url:  p.thumbnail_url  ?? null,
+      like_count:     p.like_count     ?? 0,
+      comment_count:  p.comment_count  ?? 0,
+      created_at:     p.created_at,
+      visibility:     p.visibility,
+      author_id:      p.author_id,
+      authorNickname: (p.users as any)?.nickname  ?? '가족',
+      authorAvatar:   (p.users as any)?.avatar_url ?? null,
+    })),
+    totalCount: count ?? 0,
+  }
 }

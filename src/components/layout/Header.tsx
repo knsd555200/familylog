@@ -1,10 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Bell, ChevronLeft, PenSquare, UserRound } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getUnreadNotificationCount } from '@/lib/api/posts'
+import AuthSheet from '@/components/auth/AuthSheet'
 
 const TITLES: Record<string, string> = {
   '/community': '커뮤니티', '/store': '스토어',
@@ -17,6 +18,16 @@ export default function Header() {
   const router = useRouter()
   const { isLoggedIn } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
+  // 로그인 모달 표시 여부 — 페이지 이동 대신 시트로 인증 폼을 띄운다
+  const [showAuth, setShowAuth] = useState(false)
+
+  // 모달에 넘기는 콜백 — 참조 안정성 확보(useCallback). 닫기/성공 모두 모달만 닫음
+  const handleAuthClose = useCallback(() => {
+    setShowAuth(false)
+  }, [])
+  const handleAuthSuccess = useCallback(() => {
+    setShowAuth(false)
+  }, [])
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -31,6 +42,8 @@ export default function Header() {
   const title = TITLES[pathname] || TITLES[basePath] || ''
 
   return (
+    // backdrop-filter가 걸린 header는 fixed 자손의 컨테이닝 블록이 되므로 AuthSheet는 header 밖 형제로 둔다
+    <>
     <header className="fixed top-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-sm border-b border-brand-line lg:hidden h-14">
       <div className="grid grid-cols-3 items-center h-full px-4 max-w-lg mx-auto">
 
@@ -45,10 +58,10 @@ export default function Header() {
               <PenSquare size={22} />
             </Link>
           ) : (
-            <Link href="/login" className="flex items-center gap-1 text-xs font-medium text-brand-sub border border-brand-line rounded-full px-2.5 py-1">
+            <button onClick={() => setShowAuth(true)} className="flex items-center gap-1 text-xs font-medium text-brand-sub border border-brand-line rounded-full px-2.5 py-1">
               <UserRound size={13} />
               로그인
-            </Link>
+            </button>
           )}
         </div>
 
@@ -58,7 +71,7 @@ export default function Header() {
             <span className="font-medium text-brand-text text-sm truncate">{title}</span>
           ) : (
             <Link href="/community">
-              <img src="/familog_logo_가로.png" alt="패밀로그" className="h-7 w-auto object-contain" />
+              <img src="/logo-wordmark.png" alt="패밀로그" className="h-10 w-auto object-contain" />
             </Link>
           )}
         </div>
@@ -77,5 +90,11 @@ export default function Header() {
 
       </div>
     </header>
+
+    {/* 로그인/회원가입 시트 — header(backdrop-filter) 밖에 두어 뷰포트 전체를 덮게 함 */}
+    {showAuth && (
+      <AuthSheet initialTab="login" onClose={handleAuthClose} onSuccess={handleAuthSuccess} />
+    )}
+    </>
   )
 }

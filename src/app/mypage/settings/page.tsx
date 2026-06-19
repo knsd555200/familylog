@@ -1,14 +1,18 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ChevronRight, Pencil, Globe, Bell, Lock, BookOpen, MessageSquare, LogOut, Receipt } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Pencil, Globe, Bell, Lock, BookOpen, MessageSquare, LogOut, Receipt, Building2, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { VisibilitySheet } from '@/components/VisibilitySheet'
+import { canManageEvents } from '@/lib/api/eventManager'
 
 export default function SettingsPage() {
   const router = useRouter()
   const { user, logout, updateUser } = useAuth()
+  // 행사 진입점 분기 — canManage: 관리 권한(admin·event_manager), isSuperAdmin: 심사 권한
+  const canManage    = canManageEvents(user?.role)
+  const isSuperAdmin = user?.role === 'admin'
   const [toast, setToast] = useState<string | null>(null)
   const [showVisibility, setShowVisibility] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -105,6 +109,32 @@ export default function SettingsPage() {
             </button>
           </div>
         </section>
+
+        {/* 행사 섹션 — 일반: 주최 신청 / 수퍼관리자: 심사 (관리는 마이페이지 '행사' 탭) */}
+        {/*  · 비-admin 행사관리자는 표시할 항목이 없어 섹션 자체를 숨김 */}
+        {(!canManage || isSuperAdmin) && (
+          <section>
+            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-2 px-1">행사</h2>
+            <div className="bg-white rounded-2xl border border-brand-line divide-y divide-brand-line overflow-hidden">
+              {!canManage && (
+                <button onClick={() => router.push('/events/apply')}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-brand-card transition-colors">
+                  <Building2 size={17} className="text-brand-sub flex-shrink-0" />
+                  <span className="flex-1 text-sm text-brand-text text-left">행사 주최 신청</span>
+                  <ChevronRight size={16} className="text-brand-muted" />
+                </button>
+              )}
+              {isSuperAdmin && (
+                <button onClick={() => router.push('/admin/event-managers')}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-brand-card transition-colors">
+                  <ShieldCheck size={17} className="text-brand-sub flex-shrink-0" />
+                  <span className="flex-1 text-sm text-brand-text text-left">행사 관리자 심사</span>
+                  <ChevronRight size={16} className="text-brand-muted" />
+                </button>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* 고객 지원 섹션 */}
         <section>

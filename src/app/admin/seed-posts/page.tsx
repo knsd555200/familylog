@@ -85,7 +85,7 @@ export default function SeedPostsPage() {
         continue
       }
       const mediaUrls = p.mediaUrls ?? (p.thumbnail ? [p.thumbnail] : [])
-      const visibility = p.visibility === 'member' ? 'members' : 'public'
+      const visibility = 'public'
       const { error } = await supabase.from('posts').insert({
         author_id: user.id,
         post_type: 'text',

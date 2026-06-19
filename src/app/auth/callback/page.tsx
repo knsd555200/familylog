@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { consumePendingInvite } from '@/lib/pendingInvite'
 
 /** hash(#access_token=...) 형태의 쿼리 파라미터 파싱 */
 function parseHashParams(hash: string): URLSearchParams {
@@ -74,9 +75,17 @@ export default function AuthCallbackPage() {
           .maybeSingle()
         if (dbError) throw dbError
 
-        const nickname = data?.nickname?.trim()
+        // 트리거는 nickname을 null로 두므로, nickname이 채워졌으면 온보딩 완료로 간주
+        const profileComplete = !!data?.nickname?.trim()
         // 풀 페이지 이동: 세션이 localStorage에 저장된 후 새 페이지가 INITIAL_SESSION을 올바르게 수신하도록
-        window.location.replace(nickname ? '/feed' : '/signup')
+        if (!profileComplete) {
+          // 미완성 → 온보딩으로. 대기 초대는 온보딩 완료 후 signup에서 소비한다.
+          window.location.replace('/signup')
+        } else {
+          // 완성 → 대기 초대가 있으면 합류 페이지로, 없으면 피드로
+          const inviteCode = consumePendingInvite()
+          window.location.replace(inviteCode ? `/invite/${inviteCode}` : '/feed')
+        }
       } catch {
         // 토큰 교환·세션·DB 오류 등 모든 실패 시 로그인으로 이동
         window.location.replace('/login')

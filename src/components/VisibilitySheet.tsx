@@ -3,13 +3,13 @@ import { useState, useEffect, useRef } from 'react'
 import { Globe, Users, Lock, Check, X } from 'lucide-react'
 
 export const VISIBILITY_OPTIONS = [
-  { id: 'public',  label: '전체 공개', desc: '누구나 볼 수 있어요',            icon: Globe },
-  { id: 'members', label: '멤버 공개', desc: '패밀로그 멤버에게 보여요',        icon: Users },
-  { id: 'private', label: '비공개',    desc: '나와 가족 구성원만 볼 수 있어요', icon: Lock  },
+  { id: 'public',  label: '전체 공개',   desc: '누구나 볼 수 있어요',         icon: Globe },
+  { id: 'family',  label: '가족만 보기', desc: '가족 구성원만 볼 수 있어요',   icon: Users },
+  { id: 'private', label: '나만 보기',   desc: '나만 볼 수 있어요',            icon: Lock  },
 ] as const
 
 export function getVisibility(id: string) {
-  return VISIBILITY_OPTIONS.find(v => v.id === id) ?? VISIBILITY_OPTIONS[1]
+  return VISIBILITY_OPTIONS.find(v => v.id === id) ?? VISIBILITY_OPTIONS[2]
 }
 
 interface Props {
