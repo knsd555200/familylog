@@ -84,7 +84,7 @@ export default function AuthCallbackPage() {
         } else {
           // 완성 → 대기 초대가 있으면 합류 페이지로, 없으면 피드로
           const inviteCode = consumePendingInvite()
-          window.location.replace(inviteCode ? `/invite/${inviteCode}` : '/feed')
+          window.location.replace(inviteCode ? `/invite/${inviteCode}` : '/community')
         }
       } catch {
         // 토큰 교환·세션·DB 오류 등 모든 실패 시 로그인으로 이동

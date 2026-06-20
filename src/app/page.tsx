@@ -2,15 +2,16 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import { resolveHomePath } from '@/lib/resolveHome'
 
 export default function RootPage() {
-  const { status } = useAuth()
+  const { user, status } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
     if (status === 'initializing') return
-    router.replace('/community') // 로그인 여부 무관하게 피드가 첫 화면
-  }, [status, router])
+    router.replace(status === 'authenticated' ? resolveHomePath(user) : '/community')
+  }, [user, status, router])
 
   return null
 }

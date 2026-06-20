@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { addMerit } from '@/lib/api/merits'
 import { FeedPost } from '@/types/post'
 import { CommunityPost } from '@/types/post'
+import { STORY_FEED_GATING_ENABLED } from '@/lib/constants'
 
 export function formatTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -160,32 +161,35 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
 
   const now = Date.now()
 
-  const filtered = data.filter(p => {
-    if (p.is_pinned) return true
+  // STORY_FEED_GATING_ENABLED=false일 때 게이팅 전체 건너뜀 — SQL visibility 필터는 유효(public만 내려옴)
+  const filtered = STORY_FEED_GATING_ENABLED
+    ? data.filter(p => {
+        if (p.is_pinned) return true
 
-    const daysSinceCreated = (now - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24)
+        const daysSinceCreated = (now - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24)
 
-    // 운영자 → 7일 기본 노출 보장, 이후 점수로 생존
-    if (p.users?.role === 'admin') {
-      if (daysSinceCreated <= 7) return true
-    }
+        // 운영자 → 7일 기본 노출 보장, 이후 점수로 생존
+        if (p.users?.role === 'admin') {
+          if (daysSinceCreated <= 7) return true
+        }
 
-    // 신규 공개글 → 24시간 기본 노출 보장 (모든 유저)
-    if (daysSinceCreated <= 1) return true
+        // 신규 공개글 → 24시간 기본 노출 보장 (모든 유저)
+        if (daysSinceCreated <= 1) return true
 
-    // 핵심 가정 → 3일 기본 노출 보장, 이후 점수로 생존
-    if (p.users?.tier === 'fruit' || p.users?.tier === 'beacon') {
-      if (daysSinceCreated <= 3) return true
-    }
+        // 핵심 가정 → 3일 기본 노출 보장, 이후 점수로 생존
+        if (p.users?.tier === 'fruit' || p.users?.tier === 'beacon') {
+          if (daysSinceCreated <= 3) return true
+        }
 
-    // 모든 공개글 → 좋아요 1개 이상이면 노출 (기간 제한 없음)
-    if (p.like_count >= 1) return true
+        // 모든 공개글 → 좋아요 1개 이상이면 노출 (기간 제한 없음)
+        if (p.like_count >= 1) return true
 
-    // 댓글 3개 이상이면 노출 (기간 제한 없음)
-    if (p.comment_count >= 3) return true
+        // 댓글 3개 이상이면 노출 (기간 제한 없음)
+        if (p.comment_count >= 3) return true
 
-    return false
-  })
+        return false
+      })
+    : data
 
   const scored = filtered.sort((a, b) => {
     if (a.is_pinned && !b.is_pinned) return -1

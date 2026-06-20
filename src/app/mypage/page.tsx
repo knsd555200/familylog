@@ -16,6 +16,7 @@ import { getFamilyStats, type FamilyStats } from '@/lib/api/family'
 import { VisibilitySheet, getVisibility } from '@/components/VisibilitySheet'
 import FamilySpace from '@/components/family/FamilySpace'
 import InviteFamilyButton from '@/components/family/InviteFamilyButton'
+import CreateFamilySheet from '@/components/family/CreateFamilySheet'
 import {
   BADGES, getAchievedStage, getBadgeValue, getTierProgress, getDaysElapsed,
   formatRelativeDate, fmtDate, buildMilestones, buildUpcoming, calcStreakWeeks,
@@ -157,6 +158,7 @@ export default function MypagePage() {
   // 가족 합산 통계 (family_id 있을 때만 로드, 발자취 탭·프로필 헤더 공용)
   const [familyStats,        setFamilyStats]        = useState<FamilyStats | null>(null)
   const [familyLoading,      setFamilyLoading]      = useState(false)
+  const [showCreateSheet,    setShowCreateSheet]    = useState(false)
   // 행사 탭 (권한자 전용) — 관리 대상 행사 목록
   const [managedEvents,    setManagedEvents]    = useState<EventPost[]>([])
   const [eventsLoading,    setEventsLoading]    = useState(false)
@@ -528,7 +530,25 @@ export default function MypagePage() {
                   <PenLine size={24} className="text-brand-green" />
                 </div>
                 <p className="font-serif text-lg text-brand-text mb-1.5">아직 비어 있는 이야기책</p>
-                <p className="text-sm text-brand-muted leading-relaxed">이 집에서 나눌 첫 이야기를<br />남겨보세요.</p>
+                <p className="text-sm text-brand-muted leading-relaxed mb-5">
+                  {user.family_id
+                    ? <>이 집에서 나눌 첫 이야기를<br />남겨보세요.</>
+                    : <>혼자 기록을 시작하거나,<br />우리 가족 공간을 만들어보세요</>}
+                </p>
+                <div className="w-full max-w-xs space-y-2.5">
+                  <Link href="/community/write" className="w-full flex items-center justify-center gap-1.5 py-3 bg-brand-green text-white text-sm font-semibold rounded-2xl">
+                    <PenLine size={16} /> 기록하기
+                  </Link>
+                  {!user.family_id && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateSheet(true)}
+                      className="w-full py-3 border border-brand-green/35 bg-brand-green-light text-brand-green-dark text-sm font-semibold rounded-2xl"
+                    >
+                      우리 가족 공간 만들기
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               data.posts.map(post => {
@@ -828,6 +848,21 @@ export default function MypagePage() {
                 </ol>
               )}
 
+              {/* 미션 진입 카드 — 타임라인에 쌓인 성취 바로 아래, 발자취 탭 내 단일 진입점 */}
+              <Link
+                href="/benefits"
+                className="mt-6 flex items-center gap-4 bg-brand-green-light border border-brand-green/25 rounded-2xl p-4 hover:bg-brand-green-light/70 transition-colors"
+              >
+                <div className="w-11 h-11 rounded-full bg-brand-green/15 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xl">🌿</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-brand-green-dark">미션 하러 가기</p>
+                  <p className="text-xs text-brand-green mt-0.5">오늘의 도전으로 발자취를 쌓아보세요</p>
+                </div>
+                <ChevronRight size={16} className="text-brand-green flex-shrink-0" />
+              </Link>
+
               {/* 뱃지 컬렉션 — 작은 텍스트 링크 */}
               <div className="mt-6 text-center">
                 <Link href="/mypage/badges" className="text-xs text-brand-muted hover:text-brand-text transition-colors">
@@ -952,6 +987,13 @@ export default function MypagePage() {
           current=""
           onSelect={handleBulkVisibilityChange}
           onClose={() => setShowBulkVisibility(false)}
+        />
+      )}
+
+      {showCreateSheet && (
+        <CreateFamilySheet
+          onClose={() => setShowCreateSheet(false)}
+          onCreated={() => setShowCreateSheet(false)}
         />
       )}
 

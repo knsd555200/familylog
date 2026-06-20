@@ -3,20 +3,22 @@ import { useCallback, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Target, User, Bell, LogOut, LogIn } from 'lucide-react'
+import { Home, User, Bell, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import AuthSheet from '@/components/auth/AuthSheet'
+import { resolveHomePath } from '@/lib/resolveHome'
 
+// 사이드바 탭 — 미션은 마이페이지 발자취 탭 내부로 이설
 const tabs = [
-  { href: '/community', label: '홈', icon: Home },
-  { href: '/benefits', label: '미션', icon: Target },
-  { href: '/mypage', label: '마이', icon: User },
+  { href: '/community', label: '홈',  icon: Home },
+  { href: '/mypage',    label: '마이', icon: User },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout, isLoggedIn } = useAuth()
+  const homeHref = resolveHomePath(user)
   // 로그인 모달 표시 여부 — 페이지 이동 대신 시트로 인증 폼을 띄운다
   const [showAuth, setShowAuth] = useState(false)
   const handleAuthClose = useCallback(() => setShowAuth(false), [])
@@ -24,14 +26,15 @@ export default function Sidebar() {
 
   return (
     <div className="flex flex-col h-full px-4 py-6">
-      <Link href="/community" className="flex items-center gap-2.5 mb-8 px-2">
+      <Link href={homeHref} className="flex items-center gap-2.5 mb-8 px-2">
         <img src="/logo-wordmark.png" alt="패밀로그" className="h-14 w-auto object-contain" />
       </Link>
       <nav className="flex-1 space-y-1">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
+          const targetHref = label === '홈' ? homeHref : href
           return (
-            <Link key={href} href={href}
+            <Link key={href} href={targetHref}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${active ? 'bg-brand-green-light text-brand-green-dark' : 'text-brand-sub hover:bg-brand-card'}`}>
               <Icon size={18} strokeWidth={active ? 2.5 : 1.8} />
               {label}

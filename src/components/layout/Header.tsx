@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, ChevronLeft, PenSquare, UserRound } from 'lucide-react'
+import { Bell, ChevronLeft, UserRound } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getUnreadNotificationCount } from '@/lib/api/posts'
 import AuthSheet from '@/components/auth/AuthSheet'
@@ -47,22 +47,18 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-sm border-b border-brand-line lg:hidden h-14">
       <div className="grid grid-cols-3 items-center h-full px-4 max-w-lg mx-auto">
 
-        {/* 왼쪽 — 상세: 뒤로가기 / 메인: 글쓰기 or 로그인 */}
+        {/* 왼쪽 — 상세: 뒤로가기 / 메인 비로그인: 로그인 버튼 (글쓰기는 하단탭 중앙으로 이설) */}
         <div className="flex items-center">
           {isDetail ? (
             <button onClick={() => router.back()} className="p-1 -ml-1 text-brand-sub">
               <ChevronLeft size={24} />
             </button>
-          ) : isLoggedIn ? (
-            <Link href="/community/write" className="p-2 -ml-2 text-brand-text">
-              <PenSquare size={22} />
-            </Link>
-          ) : (
+          ) : !isLoggedIn ? (
             <button onClick={() => setShowAuth(true)} className="flex items-center gap-1 text-xs font-medium text-brand-sub border border-brand-line rounded-full px-2.5 py-1">
               <UserRound size={13} />
               로그인
             </button>
-          )}
+          ) : null}
         </div>
 
         {/* 가운데 — 상세: 페이지 타이틀 / 메인: 로고 */}

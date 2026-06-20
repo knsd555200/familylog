@@ -27,7 +27,7 @@ export default function SignupPage() {
     if (inviteCode) { router.push(`/invite/${inviteCode}`); return }
     // 예약 플래그는 community가 소비(여기선 peek만) → 우리 가족 탭으로 보내 생성 시트가 뜨게 함
     if (peekPendingFamilyCreate()) { router.push('/community?tab=family'); return }
-    router.push('/feed')
+    router.push('/community')
   }
 
   const canProceed = nickname.trim().length > 0 && !!user?.id

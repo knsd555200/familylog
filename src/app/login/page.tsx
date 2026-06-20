@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { consumePendingInvite } from '@/lib/pendingInvite'
+import { resolveHomePath } from '@/lib/resolveHome'
 import { ChevronLeft } from 'lucide-react'
 import AuthForm, { AuthTab } from '@/components/auth/AuthForm'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { isLoggedIn, isLoading } = useAuth()
+  const { user, isLoggedIn, isLoading } = useAuth()
   const [initialTab, setInitialTab] = useState<AuthTab>('login')
 
   // 진입 시 ?tab=signup이면 회원가입 탭으로 시작 (모델하우스 CTA가 이 쿼리로 보냄)
@@ -25,11 +26,11 @@ export default function LoginPage() {
       const inviteCode = consumePendingInvite()
       if (inviteCode) {
         router.replace(`/invite/${inviteCode}`)
-      } else if (window.location.pathname !== '/community') {
-        router.replace('/community')
+      } else {
+        router.replace(resolveHomePath(user))
       }
     }
-  }, [isLoggedIn, isLoading, router])
+  }, [user, isLoggedIn, isLoading, router])
 
   // 인증 성공 후처리: 가입은 프로필 설정으로, 로그인은 위 isLoggedIn effect가 담당
   const handleSuccess = useCallback((kind: AuthTab) => {

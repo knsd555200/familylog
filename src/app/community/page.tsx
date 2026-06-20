@@ -1,6 +1,7 @@
 'use client'
-import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback, Fragment } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback, Fragment, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { communityPosts } from '@/data/community'
 import { feedPosts } from '@/data/feed'
 import { modelHousePosts, miloneIntro } from '@/data/modelHouse'
@@ -106,6 +107,7 @@ function formatEventDate(iso: string | null): string {
     month: 'long', day: 'numeric', weekday: 'short',
   })
 }
+
 // 이야기 탭 카드만 상대시간 대신 날짜로 보여줘 첫인상에서 신생 서비스 느낌을 줄인다.
 function formatStoryCardDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ko-KR', {
@@ -318,16 +320,30 @@ function ModelhouseComment({ comment, depth = 0 }: { comment: Comment; depth?: n
 }
 
 export default function CommunityPage() {
+  return (
+    <Suspense fallback={null}>
+      <CommunityPageContent />
+    </Suspense>
+  )
+}
+
+function CommunityPageContent() {
   const { user, isLoading } = useAuth()
   // 탭 상태를 URL(?tab=family)과 동기화 — 새로고침해도 우리 가족 탭 유지
   // 초기값은 항상 '이야기'(서버 렌더와 일치) → 마운트 후 effect에서 URL 복원 (hydration mismatch 방지)
   const [feedTab, setFeedTab] = useState<FeedTab>('이야기')
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('tab') === 'family') {
       setFeedTab('우리 가족')
     }
   }, [])
+
+  useEffect(() => {
+    const nextTab: FeedTab = searchParams.get('tab') === 'family' ? '우리 가족' : '이야기'
+    setFeedTab(current => current === nextTab ? current : nextTab)
+  }, [searchParams])
 
   const changeTab = (t: FeedTab) => {
     setFeedTab(t)
@@ -640,7 +656,8 @@ export default function CommunityPage() {
   }, [lightbox])
 
   // family_id 없는 사람이 '우리 가족' 탭에 있으면 모델하우스 표시
-  const isModelhouse = feedTab === '우리 가족' && !user?.family_id
+  const isModelhouse = !isLoading && feedTab === '우리 가족' && !user?.family_id
+  const showFeedSkeleton = isLoading || postsLoading
 
   // 모델하우스 CTA — 비회원은 로그인, 회원은 그 자리에서 가족 생성 시트
   const handleModelhouseCta = () => {
@@ -949,7 +966,7 @@ export default function CommunityPage() {
               onClick={handleModelhouseCta}
               className="w-full py-3.5 bg-brand-green text-white text-sm font-semibold rounded-2xl"
             >
-              {!user ? '시작하기' : '가족 만들기'}
+              {!user ? '시작하기' : '우리 가족 공간 만들기'}
             </button>
             <p className="text-xs text-brand-muted mt-3">
               {!user ? '이미 계정이 있다면 로그인하면 돼요' : '초대를 받았다면 링크로 바로 합류할 수 있어요'}
@@ -1095,7 +1112,7 @@ export default function CommunityPage() {
           </div>
         )}
 
-        {postsLoading ? (
+        {showFeedSkeleton ? (
           [1, 2, 3].map(n => (
             <div key={n} className="bg-white rounded-2xl border border-brand-line p-4 animate-pulse">
               <div className="flex items-center gap-2 mb-3">

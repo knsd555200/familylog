@@ -60,8 +60,8 @@ export default function CreateFamilySheet({
               <X size={20} />
             </button>
 
-            <h2 className="font-serif text-lg font-semibold text-brand-text mb-1">가족 만들기</h2>
-            <p className="text-sm text-brand-sub mb-5">가정명을 입력하면 초대 링크가 만들어져요</p>
+            <h2 className="font-serif text-lg font-semibold text-brand-text mb-1">우리 가족 공간 만들기</h2>
+            <p className="text-sm text-brand-sub mb-5">우리 가족 이름을 정하면 초대 링크가 만들어져요</p>
 
             <input
               type="text"
@@ -80,7 +80,15 @@ export default function CreateFamilySheet({
               disabled={!name.trim() || loading}
               className="w-full py-3 bg-brand-green text-white text-sm font-medium rounded-full disabled:opacity-40 mt-3"
             >
-              {loading ? '만드는 중…' : '가족 만들기'}
+              {loading ? '만드는 중…' : '만들기'}
+            </button>
+            {/* 가정 생성 없이 개인 회원으로 둘러보는 보조 이탈 경로. */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full mt-4 py-2 text-sm font-medium text-brand-muted hover:text-brand-text transition-colors"
+            >
+              개인 회원으로 둘러볼게요
             </button>
           </>
         ) : (
