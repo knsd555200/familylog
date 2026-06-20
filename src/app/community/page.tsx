@@ -106,6 +106,12 @@ function formatEventDate(iso: string | null): string {
     month: 'long', day: 'numeric', weekday: 'short',
   })
 }
+// 이야기 탭 카드만 상대시간 대신 날짜로 보여줘 첫인상에서 신생 서비스 느낌을 줄인다.
+function formatStoryCardDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('ko-KR', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  })
+}
 
 function isDbPostId(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
@@ -1031,7 +1037,7 @@ export default function CommunityPage() {
 
         {/* 이야기 탭 입구 — 공개 기록이 모이는 광장의 정체성을 먼저 보여준다. */}
         {feedTab === '이야기' && (
-          <div className="px-4 pt-2 pb-1">
+          <div className="px-4 pt-2 pb-5">
             <p className="font-serif text-2xl font-bold text-brand-text leading-snug">
               서로 다른 가정의 하루가 이곳에 모여요
             </p>
@@ -1168,18 +1174,45 @@ export default function CommunityPage() {
                       >
                         <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <div className="text-sm font-medium truncate">{post.authorName}</div>
-                            {post.familyName && (
-                              <span className="text-[11px] font-medium text-brand-green-dark bg-brand-green-light px-2 py-0.5 rounded-full flex-shrink-0">
-                                {post.familyName}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-brand-muted truncate">
-                            {post.authorStatus}
-                            {post.createdAt && ` · ${formatTime(post.createdAt)}`}
-                          </div>
+                          {feedTab === '이야기' ? (
+                            post.familyName ? (
+                              <>
+                                {/* 이야기 탭 — 가족명 1차, 닉네임·날짜 부제 */}
+                                <div className="font-serif text-sm font-medium text-brand-green truncate">
+                                  {post.familyName}
+                                </div>
+                                <div className="text-xs text-brand-muted truncate">
+                                  {post.authorName}
+                                  {post.createdAt && ` · ${formatStoryCardDate(post.createdAt)}`}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {/* 이야기 탭 — 개인 회원: 닉네임 1차, 날짜만 부제 */}
+                                <div className="text-sm font-medium truncate">{post.authorName}</div>
+                                {post.createdAt && (
+                                  <div className="text-xs text-brand-muted truncate">
+                                    {formatStoryCardDate(post.createdAt)}
+                                  </div>
+                                )}
+                              </>
+                            )
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div className="text-sm font-medium truncate">{post.authorName}</div>
+                                {post.familyName && (
+                                  <span className="text-[11px] font-medium text-brand-green-dark bg-brand-green-light px-2 py-0.5 rounded-full flex-shrink-0">
+                                    {post.familyName}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-brand-muted truncate">
+                                {post.authorStatus}
+                                {post.createdAt && ` · ${formatTime(post.createdAt)}`}
+                              </div>
+                            </>
+                          )}
                         </div>
                         {post.category === '인증' && (
                           <span className="text-[10px] px-2 py-0.5 bg-brand-green-light text-brand-green-dark rounded-full font-medium flex-shrink-0">
