@@ -133,6 +133,7 @@ interface CardPost {
   likes: number
   comments: number
   authorId?: string
+  familyName?: string | null
   postType?: string
   createdAt?: string
 }
@@ -160,6 +161,7 @@ function feedToCard(p: FeedPost): CardPost {
     likes: p.likes,
     comments: p.comments,
     authorId: p.authorId,
+    familyName: p.familyName ?? null,
     postType: p.postType,
     createdAt: p.createdAt,
   }
@@ -178,6 +180,7 @@ function communityToCard(p: CommunityPost): CardPost {
     likes: p.likes,
     comments: p.comments,
     authorId: p.authorId,
+    familyName: null,
     createdAt: p.createdAt,
   }
 }
@@ -1026,6 +1029,15 @@ export default function CommunityPage() {
               </div>
         )}
 
+        {/* 이야기 탭 입구 — 공개 기록이 모이는 광장의 정체성을 먼저 보여준다. */}
+        {feedTab === '이야기' && (
+          <div className="px-4 pt-2 pb-1">
+            <p className="font-serif text-2xl font-bold text-brand-text leading-snug">
+              서로 다른 가정의 하루가 이곳에 모여요
+            </p>
+          </div>
+        )}
+
         {/* 라벨 + 토글 — 이야기 탭: 정렬 토글, 우리 가족 탭: 대형/사진 보기 토글 */}
         {feedTab !== '우리 가족' ? (
           <div className="flex items-center justify-between">
@@ -1156,7 +1168,14 @@ export default function CommunityPage() {
                       >
                         <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{post.authorName}</div>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="text-sm font-medium truncate">{post.authorName}</div>
+                            {post.familyName && (
+                              <span className="text-[11px] font-medium text-brand-green-dark bg-brand-green-light px-2 py-0.5 rounded-full flex-shrink-0">
+                                {post.familyName}
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-brand-muted truncate">
                             {post.authorStatus}
                             {post.createdAt && ` · ${formatTime(post.createdAt)}`}
