@@ -25,7 +25,7 @@ function CommunityWriteForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { user } = useAuth()
+  const { user, status } = useAuth()
 
   // 행사 인증 컨텍스트
   const eventId          = searchParams.get('event_id')
@@ -55,7 +55,9 @@ function CommunityWriteForm() {
   // ── 공통 필드 ─────────────────────────────────────────────────────────────
   const [title,      setTitle]      = useState('')
   const [content,    setContent]    = useState('')
-  const [visibility, setVisibility] = useState<Visibility>('public')
+  const [visibility, setVisibility] = useState<Visibility>('private')
+  const visibilityInitializedRef = useRef(false)
+  const visibilityTouchedRef = useRef(false)
   const [showVisibilitySheet, setShowVisibilitySheet] = useState(false)
   const [imageFiles,    setImageFiles]    = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
@@ -66,6 +68,19 @@ function CommunityWriteForm() {
   // 나만 보기로 저장 후 가족 만들기 시트 — 저장된 글 id 보관해 생성 후 그 글로 이동
   const [showCreateSheet, setShowCreateSheet] = useState(false)
   const [savedPostId, setSavedPostId] = useState<string | null>(null)
+
+  // 인증 사용자 확정 후 가정 유무로 기본 공개 범위를 한 번만 정한다.
+  useEffect(() => {
+    if (status !== 'authenticated' || !user) return
+    if (visibilityInitializedRef.current || visibilityTouchedRef.current) return
+    setVisibility(user.family_id ? 'family' : 'private')
+    visibilityInitializedRef.current = true
+  }, [status, user])
+
+  const setUserVisibility = (next: Visibility) => {
+    visibilityTouchedRef.current = true
+    setVisibility(next)
+  }
 
   // ── 행사 전용 필드 ────────────────────────────────────────────────────────
   const [eventStartAt,         setEventStartAt]         = useState('')
@@ -121,7 +136,7 @@ function CommunityWriteForm() {
       setModalError('')
       setShowNoFamilyModal(true)
     } else {
-      setVisibility('family')
+      setUserVisibility('family')
     }
   }
 
@@ -453,7 +468,7 @@ function CommunityWriteForm() {
                       setShowVisibilitySheet(false)
                       // 가족만 보기는 가족 유무 분기(없으면 안내 모달) — 기존 핸들러 재사용
                       if (v === 'family') handleFamilyVisibilityClick()
-                      else setVisibility(v)
+                      else setUserVisibility(v)
                     }}
                     className={`w-full flex items-start gap-3 px-3 py-3 rounded-2xl text-left transition-colors ${
                       active ? 'bg-brand-green-light' : 'hover:bg-brand-card'
@@ -496,7 +511,7 @@ function CommunityWriteForm() {
                 {loading ? '저장 중…' : '나만 보기로 저장하고 가족 만들기'}
               </button>
               <button
-                onClick={() => { setVisibility('private'); setShowNoFamilyModal(false) }}
+                onClick={() => { setUserVisibility('private'); setShowNoFamilyModal(false) }}
                 className="w-full py-3 bg-brand-card text-brand-text text-sm font-medium rounded-2xl"
               >
                 나만 보기로 바꾸고 계속 쓰기
