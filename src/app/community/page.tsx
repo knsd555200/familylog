@@ -155,6 +155,102 @@ type StoryFamilyAvatar = {
   latestCreatedAt?: string
 }
 
+function StoryFamilyDirectoryModal({
+  families,
+  loading,
+  onClose,
+}: {
+  families: FamilyAvatarSummary[]
+  loading: boolean
+  onClose: () => void
+}) {
+  const [show, setShow] = useState(false)
+  const touchY = useRef(0)
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setShow(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setShow(false)
+    setTimeout(onClose, 300)
+  }, [onClose])
+
+  const renderContent = () => (
+    <>
+      <h3 className="font-serif text-lg font-semibold text-brand-text mb-1 text-center">패밀로그에 모인 가정들</h3>
+      <p className="text-xs text-brand-muted text-center mb-5">서로의 하루를 함께 기록하는 가정들이에요</p>
+
+      {loading ? (
+        <p className="py-10 text-center text-sm text-brand-muted">가정을 불러오고 있어요</p>
+      ) : families.length === 0 ? (
+        <p className="py-10 text-center text-sm text-brand-muted">아직 함께하는 가정이 없어요</p>
+      ) : (
+        // 가족 전체 목록은 아직 이동 경로가 없어 비클릭 그리드로만 보여준다.
+        <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-5 max-h-[58vh] overflow-y-auto pr-1">
+          {families.map(family => (
+            <div key={family.id} className="min-w-0 text-center">
+              {family.avatar_url
+                ? <img src={family.avatar_url} alt={family.name} className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-brand-green-light" />
+                : <div className="w-16 h-16 rounded-full bg-brand-green flex items-center justify-center mx-auto ring-2 ring-brand-green-light">
+                    <span className="text-lg text-white">{family.name.charAt(0)}</span>
+                  </div>
+              }
+              <p className="mt-2 text-xs font-medium text-brand-text truncate">{family.name}</p>
+              {family.seq !== null && (
+                <p className="mt-0.5 text-[10px] text-brand-muted truncate">{family.seq}번째 가정</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 ${show ? 'opacity-100' : 'opacity-0'}`}
+        onClick={handleClose}
+      />
+      <div
+        className={`lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-xl
+          transition-transform duration-300 ease-out ${show ? 'translate-y-0' : 'translate-y-full'}`}
+        onTouchStart={e => { touchY.current = e.touches[0].clientY }}
+        onTouchEnd={e => { if (e.changedTouches[0].clientY - touchY.current > 80) handleClose() }}
+      >
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 bg-brand-line rounded-full" />
+        </div>
+        <div className="relative px-6 pb-10">
+          <button type="button" onClick={handleClose} className="absolute top-4 right-4 p-1 text-brand-muted hover:text-brand-text transition-colors">
+            <X size={18} />
+          </button>
+          {renderContent()}
+        </div>
+      </div>
+      <div
+        className={`hidden lg:flex fixed top-0 right-0 bottom-0 left-64 z-50 items-center justify-center px-4
+          transition-opacity duration-300 ${show ? 'opacity-100' : 'opacity-0'}`}
+        onClick={handleClose}
+      >
+        <div
+          className={`relative bg-white rounded-2xl shadow-xl max-w-2xl w-full px-6 pt-6 pb-8
+            transition-all duration-300 ease-out ${show ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
+          onClick={e => e.stopPropagation()}
+        >
+          <button type="button" onClick={handleClose}
+            className="absolute top-3 right-4 p-1 text-brand-muted hover:text-brand-text transition-colors">
+            <X size={18} />
+          </button>
+          {renderContent()}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // 피드 메모리 캐시 — 재방문 시 스켈레톤 깜빡임 방지 (보여주고 뒤에서 갱신)
 let feedCache: { popular: CardPost[]; latest: CardPost[] } | null = null
 
@@ -377,8 +473,8 @@ function CommunityPageContent() {
   const [familyMemberCount, setFamilyMemberCount] = useState<number | null>(null)
   // 가족 정체성(이름·일수·기수·소개) — 상단 영역용. null = 아직 미조회(로딩 스켈레톤)
   const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null }[] } | null>(null)
-  // 이야기 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체는 최초 진입 때만 별도 조회한다.
-  const [storyFamilyMode, setStoryFamilyMode] = useState<'summary' | 'all'>('summary')
+  // 이야기 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체 목록은 모달 최초 진입 때만 별도 조회한다.
+  const [showAllFamiliesModal, setShowAllFamiliesModal] = useState(false)
   const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
   const [allFamiliesLoading, setAllFamiliesLoading] = useState(false)
   // 모델하우스 "가족 만들기" — 그 자리 생성 시트
@@ -706,31 +802,21 @@ function CommunityPageContent() {
       (a, b) => new Date(b.latestCreatedAt ?? 0).getTime() - new Date(a.latestCreatedAt ?? 0).getTime(),
     )
   }, [popularPosts])
-  const storyAllFamilies = useMemo<StoryFamilyAvatar[]>(() =>
-    (allFamilies ?? []).map(family => ({
-      id: family.id,
-      name: family.name,
-      avatarUrl: family.avatar_url,
-    })),
-    [allFamilies],
-  )
-  const visibleStoryFamilies = storyFamilyMode === 'all' ? storyAllFamilies : storyRecentFamilies
-  const storyFamilyOverflow = Math.max(0, visibleStoryFamilies.length - 8)
-  const handleStoryFamilyModeToggle = async () => {
-    if (storyFamilyMode === 'summary') {
-      setStoryFamilyMode('all')
-      if (allFamilies === null && !allFamiliesLoading) {
-        setAllFamiliesLoading(true)
-        try {
-          setAllFamilies(await getAllFamilies())
-        } finally {
-          setAllFamiliesLoading(false)
-        }
-      }
-      return
+  const storyFamilyOverflow = Math.max(0, storyRecentFamilies.length - 8)
+  const loadAllFamiliesOnce = useCallback(async () => {
+    if (allFamilies !== null || allFamiliesLoading) return
+    setAllFamiliesLoading(true)
+    try {
+      setAllFamilies(await getAllFamilies())
+    } finally {
+      setAllFamiliesLoading(false)
     }
-    setStoryFamilyMode('summary')
-  }
+  }, [allFamilies, allFamiliesLoading])
+  const handleAllFamiliesOpen = useCallback(() => {
+    setShowAllFamiliesModal(true)
+    loadAllFamiliesOnce()
+  }, [loadAllFamiliesOnce])
+  const handleAllFamiliesClose = useCallback(() => setShowAllFamiliesModal(false), [])
   // 탭 필터 → 정렬. popularPosts는 로드 시 최신순으로 보관되어 있으므로
   // 'latest'는 그대로, 'popular'만 점수순으로 재정렬한다.
   // 정렬은 로드된 likes/comments 기준(낙관적 likeCounts 미사용) — 좋아요 시 카드가 튀지 않게.
@@ -1124,37 +1210,35 @@ function CommunityPageContent() {
           </div>
         )}
 
-        {feedTab === '이야기' && (storyRecentFamilies.length > 0 || storyFamilyMode === 'all') && (
+        {feedTab === '이야기' && (
           <div className="bg-brand-green-light border border-brand-green/25 rounded-2xl p-4">
             <div className="flex items-center justify-between gap-3 mb-3">
               <p className="text-[11px] font-medium text-brand-green-dark">
-                {storyFamilyMode === 'all' ? '함께하는 가정' : '최근 이야기한 가정'}
+                최근 이야기한 가정
               </p>
               <button
                 type="button"
-                onClick={handleStoryFamilyModeToggle}
+                onClick={handleAllFamiliesOpen}
                 className="text-[11px] font-medium text-brand-green/70 hover:text-brand-green-dark transition-colors"
               >
-                {storyFamilyMode === 'all' ? '최근 활동' : '전체 보기'}
+                전체 보기
               </button>
             </div>
 
-            {allFamiliesLoading && storyFamilyMode === 'all' ? (
-              <p className="text-sm text-brand-green/60">가정을 불러오고 있어요</p>
-            ) : visibleStoryFamilies.length === 0 ? (
+            {storyRecentFamilies.length === 0 ? (
               <p className="text-sm text-brand-green/60">아직 공개 이야기를 남긴 가정이 없어요</p>
             ) : (
               // 가족 아바타는 아직 이동 경로가 없어 클릭 없이 조용히 보여준다.
               <div className="flex items-center gap-2">
-                {visibleStoryFamilies.slice(0, 8).map(family => (
+                {storyRecentFamilies.slice(0, 8).map(family => (
                   family.avatarUrl
-                    ? <img key={family.id} src={family.avatarUrl} alt={family.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-brand-green-light" />
-                    : <div key={family.id} className="w-9 h-9 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0 ring-2 ring-brand-green-light">
-                        <span className="text-[11px] text-white">{family.name.charAt(0)}</span>
+                    ? <img key={family.id} src={family.avatarUrl} alt={family.name} className="w-14 h-14 rounded-full object-cover flex-shrink-0 ring-2 ring-brand-green-light" />
+                    : <div key={family.id} className="w-14 h-14 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0 ring-2 ring-brand-green-light">
+                        <span className="text-base text-white">{family.name.charAt(0)}</span>
                       </div>
                 ))}
                 {storyFamilyOverflow > 0 && (
-                  <div className="w-9 h-9 rounded-full bg-white/80 flex items-center justify-center text-[10px] text-brand-green-dark flex-shrink-0">
+                  <div className="w-14 h-14 rounded-full bg-white/80 flex items-center justify-center text-sm text-brand-green-dark flex-shrink-0">
                     +{storyFamilyOverflow}
                   </div>
                 )}
@@ -1569,6 +1653,15 @@ function CommunityPageContent() {
       {/* 비회원 액션 게이트 인증 시트 — 가입탭 우선(탭 전환은 시트 안에서 자유) */}
       {showAuth && (
         <AuthSheet initialTab="signup" onClose={handleAuthClose} onSuccess={handleAuthSuccess} />
+      )}
+
+      {/* 이야기 탭 전체 가족 모달 — 시트 셸만 재사용하고 가족 그리드 내용으로 채운다. */}
+      {showAllFamiliesModal && (
+        <StoryFamilyDirectoryModal
+          families={allFamilies ?? []}
+          loading={allFamiliesLoading}
+          onClose={handleAllFamiliesClose}
+        />
       )}
 
       {/* 토스트 메시지 */}
