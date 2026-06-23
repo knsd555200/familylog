@@ -8,7 +8,7 @@ import { modelHousePosts, miloneIntro } from '@/data/modelHouse'
 import type { Comment, CommunityPost, FeedPost } from '@/types/post'
 import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar, Pencil, List, LayoutGrid } from 'lucide-react'
 import { getDbCommunityPosts, getDbFeedPosts, getFamilyFeedPosts, getMyLikes, toggleLike, formatTime, getCommentPreviews, createComment, type CommentPreview } from '@/lib/api/posts'
-import { getFamilyMemberCount, getFamilyIdentity } from '@/lib/api/family'
+import { getFamilyMemberCount, getFamilyIdentity, getAllFamilies, type FamilyAvatarSummary } from '@/lib/api/family'
 import { getTimeBasedGreeting } from '@/lib/greeting'
 import InviteFamilyButton from '@/components/family/InviteFamilyButton'
 import CreateFamilySheet from '@/components/family/CreateFamilySheet'
@@ -142,8 +142,17 @@ interface CardPost {
   comments: number
   authorId?: string
   familyName?: string | null
+  familyId?: string | null
+  familyAvatar?: string | null
   postType?: string
   createdAt?: string
+}
+
+type StoryFamilyAvatar = {
+  id: string
+  name: string
+  avatarUrl: string | null
+  latestCreatedAt?: string
 }
 
 // 피드 메모리 캐시 — 재방문 시 스켈레톤 깜빡임 방지 (보여주고 뒤에서 갱신)
@@ -170,6 +179,8 @@ function feedToCard(p: FeedPost): CardPost {
     comments: p.comments,
     authorId: p.authorId,
     familyName: p.familyName ?? null,
+    familyId: p.familyId ?? null,
+    familyAvatar: p.familyAvatar ?? null,
     postType: p.postType,
     createdAt: p.createdAt,
   }
@@ -189,6 +200,8 @@ function communityToCard(p: CommunityPost): CardPost {
     comments: p.comments,
     authorId: p.authorId,
     familyName: null,
+    familyId: null,
+    familyAvatar: null,
     createdAt: p.createdAt,
   }
 }
@@ -364,6 +377,10 @@ function CommunityPageContent() {
   const [familyMemberCount, setFamilyMemberCount] = useState<number | null>(null)
   // 가족 정체성(이름·일수·기수·소개) — 상단 영역용. null = 아직 미조회(로딩 스켈레톤)
   const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null }[] } | null>(null)
+  // 이야기 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체는 최초 진입 때만 별도 조회한다.
+  const [storyFamilyMode, setStoryFamilyMode] = useState<'summary' | 'all'>('summary')
+  const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
+  const [allFamiliesLoading, setAllFamiliesLoading] = useState(false)
   // 모델하우스 "가족 만들기" — 그 자리 생성 시트
   const [showCreateSheet, setShowCreateSheet] = useState(false)
   // 가족 정체성(가정명·소개) 편집 시트
@@ -668,6 +685,52 @@ function CommunityPageContent() {
 
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
+  const storyRecentFamilies = useMemo<StoryFamilyAvatar[]>(() => {
+    const byFamily = new Map<string, StoryFamilyAvatar>()
+
+    // 이야기 요약은 이미 불러온 public 피드에서 가족별 최신 글만 남긴다.
+    for (const post of popularPosts) {
+      if (!post.familyId || !post.familyName || !post.createdAt) continue
+      const current = byFamily.get(post.familyId)
+      if (!current || new Date(post.createdAt).getTime() > new Date(current.latestCreatedAt ?? 0).getTime()) {
+        byFamily.set(post.familyId, {
+          id: post.familyId,
+          name: post.familyName,
+          avatarUrl: post.familyAvatar ?? null,
+          latestCreatedAt: post.createdAt,
+        })
+      }
+    }
+
+    return Array.from(byFamily.values()).sort(
+      (a, b) => new Date(b.latestCreatedAt ?? 0).getTime() - new Date(a.latestCreatedAt ?? 0).getTime(),
+    )
+  }, [popularPosts])
+  const storyAllFamilies = useMemo<StoryFamilyAvatar[]>(() =>
+    (allFamilies ?? []).map(family => ({
+      id: family.id,
+      name: family.name,
+      avatarUrl: family.avatar_url,
+    })),
+    [allFamilies],
+  )
+  const visibleStoryFamilies = storyFamilyMode === 'all' ? storyAllFamilies : storyRecentFamilies
+  const storyFamilyOverflow = Math.max(0, visibleStoryFamilies.length - 8)
+  const handleStoryFamilyModeToggle = async () => {
+    if (storyFamilyMode === 'summary') {
+      setStoryFamilyMode('all')
+      if (allFamilies === null && !allFamiliesLoading) {
+        setAllFamiliesLoading(true)
+        try {
+          setAllFamilies(await getAllFamilies())
+        } finally {
+          setAllFamiliesLoading(false)
+        }
+      }
+      return
+    }
+    setStoryFamilyMode('summary')
+  }
   // 탭 필터 → 정렬. popularPosts는 로드 시 최신순으로 보관되어 있으므로
   // 'latest'는 그대로, 'popular'만 점수순으로 재정렬한다.
   // 정렬은 로드된 likes/comments 기준(낙관적 likeCounts 미사용) — 좋아요 시 카드가 튀지 않게.
@@ -1058,6 +1121,45 @@ function CommunityPageContent() {
             <p className="font-serif text-2xl font-bold text-brand-text leading-snug">
               서로 다른 가정의 하루가 이곳에 모여요
             </p>
+          </div>
+        )}
+
+        {feedTab === '이야기' && (storyRecentFamilies.length > 0 || storyFamilyMode === 'all') && (
+          <div className="bg-brand-green-light border border-brand-green/25 rounded-2xl p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-[11px] font-medium text-brand-green-dark">
+                {storyFamilyMode === 'all' ? '함께하는 가정' : '최근 이야기한 가정'}
+              </p>
+              <button
+                type="button"
+                onClick={handleStoryFamilyModeToggle}
+                className="text-[11px] font-medium text-brand-green/70 hover:text-brand-green-dark transition-colors"
+              >
+                {storyFamilyMode === 'all' ? '최근 활동' : '전체 보기'}
+              </button>
+            </div>
+
+            {allFamiliesLoading && storyFamilyMode === 'all' ? (
+              <p className="text-sm text-brand-green/60">가정을 불러오고 있어요</p>
+            ) : visibleStoryFamilies.length === 0 ? (
+              <p className="text-sm text-brand-green/60">아직 공개 이야기를 남긴 가정이 없어요</p>
+            ) : (
+              // 가족 아바타는 아직 이동 경로가 없어 클릭 없이 조용히 보여준다.
+              <div className="flex items-center gap-2">
+                {visibleStoryFamilies.slice(0, 8).map(family => (
+                  family.avatarUrl
+                    ? <img key={family.id} src={family.avatarUrl} alt={family.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-brand-green-light" />
+                    : <div key={family.id} className="w-9 h-9 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0 ring-2 ring-brand-green-light">
+                        <span className="text-[11px] text-white">{family.name.charAt(0)}</span>
+                      </div>
+                ))}
+                {storyFamilyOverflow > 0 && (
+                  <div className="w-9 h-9 rounded-full bg-white/80 flex items-center justify-center text-[10px] text-brand-green-dark flex-shrink-0">
+                    +{storyFamilyOverflow}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

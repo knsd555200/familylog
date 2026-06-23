@@ -11,6 +11,13 @@ export type Family = {
   created_at: string
 }
 
+export type FamilyAvatarSummary = {
+  id: string
+  name: string
+  avatar_url: string | null
+  seq: number | null
+}
+
 // ── 가족 생성 ─────────────────────────────────────────────────────────────────
 
 /**
@@ -239,6 +246,23 @@ export async function getFamilyName(familyId: string): Promise<string | null> {
     .eq('id', familyId)
     .maybeSingle() // 결과 없을 때 406 방지
   return data?.name ?? null
+}
+
+// 이야기 탭 전체 보기용 가족 목록 — families 행이 있는 가정만 seq 순서로 가져온다.
+export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
+  const { data, error } = await supabase
+    .from('families')
+    .select('id, name, avatar_url, seq')
+    .order('seq', { ascending: true })
+
+  if (error || !data) return []
+
+  return data.map(family => ({
+    id: family.id,
+    name: family.name,
+    avatar_url: family.avatar_url ?? null,
+    seq: family.seq ?? null,
+  }))
 }
 
 // 가족 공간 상단 정체성 영역 전용 조회

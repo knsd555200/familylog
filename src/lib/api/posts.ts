@@ -119,6 +119,8 @@ function dbToFeedPost(p: any): FeedPost {
     category: p.category ?? 'daily',
     authorId: p.author_id,
     familyName: p.users?.family?.name ?? null,
+    familyId: p.users?.family_id ?? p.users?.family?.id ?? null,
+    familyAvatar: p.users?.family?.avatar_url ?? null,
     // DB post_type 전달 — CommentDrawer에서 event 여부 판단에 사용
     postType: p.post_type ?? undefined,
     createdAt: p.created_at,
@@ -150,7 +152,7 @@ function dbToCommunityPost(p: any): CommunityPost {
 export async function getDbFeedPosts(): Promise<FeedPost[]> {
   const { data, error } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url, bio, role, tier, family_id, family:families!users_family_id_fkey(name))')
+    .select('*, users(nickname, avatar_url, bio, role, tier, family_id, family:families!users_family_id_fkey(id, name, avatar_url))')
     .eq('visibility', 'public')
     .neq('post_type', 'event')
     .is('deleted_at', null)

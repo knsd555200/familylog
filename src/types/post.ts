@@ -44,6 +44,8 @@ export interface FeedPost {
   videoThumb?: string
   authorId?: string
   familyName?: string | null
+  familyId?: string | null
+  familyAvatar?: string | null
   // DB posts.post_type 값 — CommentDrawer에서 event 여부 판단에 사용
   postType?: string
   // 정렬·상대시간 표시용 원시 타임스탬프 (ISO). mock은 합성값
