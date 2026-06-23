@@ -155,6 +155,32 @@ type StoryFamilyAvatar = {
   latestCreatedAt?: string
 }
 
+function StoryFamilyCard({
+  name,
+  avatarUrl,
+  className = '',
+}: {
+  name: string
+  avatarUrl: string | null
+  className?: string
+}) {
+  return (
+    <div className={`bg-white border border-brand-green/20 rounded-xl overflow-hidden ${className}`}>
+      <div className="aspect-square bg-brand-green-light/60">
+        {avatarUrl
+          ? <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+          : <div className="w-full h-full bg-brand-green flex items-center justify-center">
+              <span className="text-2xl text-white">{name.charAt(0)}</span>
+            </div>
+        }
+      </div>
+      <div className="px-2 py-1.5 text-center">
+        <p className="text-xs font-medium text-brand-text truncate">{name}</p>
+      </div>
+    </div>
+  )
+}
+
 function StoryFamilyDirectoryModal({
   families,
   loading,
@@ -187,21 +213,10 @@ function StoryFamilyDirectoryModal({
       ) : families.length === 0 ? (
         <p className="py-10 text-center text-sm text-brand-muted">아직 함께하는 가정이 없어요</p>
       ) : (
-        // 가족 전체 목록은 아직 이동 경로가 없어 비클릭 그리드로만 보여준다.
-        <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-5 max-h-[58vh] overflow-y-auto pr-1">
+        // 가족 전체 목록은 아직 이동 경로가 없어 카드도 비클릭으로만 보여준다.
+        <div className="grid grid-cols-3 lg:grid-cols-5 gap-3 max-h-[58vh] overflow-y-auto pr-1">
           {families.map(family => (
-            <div key={family.id} className="min-w-0 text-center">
-              {family.avatar_url
-                ? <img src={family.avatar_url} alt={family.name} className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-brand-green-light" />
-                : <div className="w-16 h-16 rounded-full bg-brand-green flex items-center justify-center mx-auto ring-2 ring-brand-green-light">
-                    <span className="text-lg text-white">{family.name.charAt(0)}</span>
-                  </div>
-              }
-              <p className="mt-2 text-xs font-medium text-brand-text truncate">{family.name}</p>
-              {family.seq !== null && (
-                <p className="mt-0.5 text-[10px] text-brand-muted truncate">{family.seq}번째 가정</p>
-              )}
-            </div>
+            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} />
           ))}
         </div>
       )}
@@ -802,7 +817,6 @@ function CommunityPageContent() {
       (a, b) => new Date(b.latestCreatedAt ?? 0).getTime() - new Date(a.latestCreatedAt ?? 0).getTime(),
     )
   }, [popularPosts])
-  const storyFamilyOverflow = Math.max(0, storyRecentFamilies.length - 8)
   const loadAllFamiliesOnce = useCallback(async () => {
     if (allFamilies !== null || allFamiliesLoading) return
     setAllFamiliesLoading(true)
@@ -1228,20 +1242,16 @@ function CommunityPageContent() {
             {storyRecentFamilies.length === 0 ? (
               <p className="text-sm text-brand-green/60">아직 공개 이야기를 남긴 가정이 없어요</p>
             ) : (
-              // 가족 아바타는 아직 이동 경로가 없어 클릭 없이 조용히 보여준다.
-              <div className="flex items-center gap-2">
+              // 이야기 박스 가족 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다.
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                 {storyRecentFamilies.slice(0, 8).map(family => (
-                  family.avatarUrl
-                    ? <img key={family.id} src={family.avatarUrl} alt={family.name} className="w-14 h-14 rounded-full object-cover flex-shrink-0 ring-2 ring-brand-green-light" />
-                    : <div key={family.id} className="w-14 h-14 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0 ring-2 ring-brand-green-light">
-                        <span className="text-base text-white">{family.name.charAt(0)}</span>
-                      </div>
+                  <StoryFamilyCard
+                    key={family.id}
+                    name={family.name}
+                    avatarUrl={family.avatarUrl}
+                    className="w-20 flex-shrink-0"
+                  />
                 ))}
-                {storyFamilyOverflow > 0 && (
-                  <div className="w-14 h-14 rounded-full bg-white/80 flex items-center justify-center text-sm text-brand-green-dark flex-shrink-0">
-                    +{storyFamilyOverflow}
-                  </div>
-                )}
               </div>
             )}
           </div>
