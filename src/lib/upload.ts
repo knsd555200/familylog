@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { compressImageFile } from '@/lib/imageCompress'
 
 async function getAccessToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -12,8 +13,9 @@ export async function uploadImages(files: File[]): Promise<{ urls: string[]; err
   const urls: string[] = []
 
   for (const file of files) {
+    const uploadFile = await compressImageFile(file)
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', uploadFile, uploadFile.name)
 
     const res = await fetch('/api/upload', {
       method: 'POST',
