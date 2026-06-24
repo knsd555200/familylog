@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 // Supabase 비대칭 JWT(ES256) 검증용 공개키 셋 — 모듈 1회 생성 후 캐시됨
@@ -16,9 +16,6 @@ const r2 = new S3Client({
   },
 })
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
-
 async function verifyUser(request: NextRequest) {
   // Authorization 헤더에서 Bearer 토큰 추출
   const token = request.headers.get('Authorization')?.replace('Bearer ', '')
@@ -33,46 +30,6 @@ async function verifyUser(request: NextRequest) {
     // 검증 실패(서명 불일치·만료·형식 오류 등)는 미인증으로 처리
     return null
   }
-}
-
-// 파일을 서버에서 직접 R2에 업로드 (CORS 우회)
-export async function POST(request: NextRequest) {
-  const user = await verifyUser(request)
-  if (!user) {
-    return NextResponse.json({ error: '로그인이 필요해요' }, { status: 401 })
-  }
-
-  const formData = await request.formData()
-  const file = formData.get('file') as File | null
-  if (!file) {
-    return NextResponse.json({ error: '파일이 없어요' }, { status: 400 })
-  }
-
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json(
-      { error: '지원하지 않는 파일 형식이에요 (jpg, png, gif, webp만 가능)' },
-      { status: 400 }
-    )
-  }
-  if (file.size > MAX_SIZE_BYTES) {
-    return NextResponse.json({ error: '파일 크기는 5MB 이하여야 해요' }, { status: 400 })
-  }
-
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-  const key = `posts/${user.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`
-
-  const arrayBuffer = await file.arrayBuffer()
-
-  await r2.send(new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
-    Key: key,
-    ContentType: file.type,
-    ContentLength: file.size,
-    Body: Buffer.from(arrayBuffer),
-  }))
-
-  const publicUrl = `${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${key}`
-  return NextResponse.json({ publicUrl })
 }
 
 export async function DELETE(request: NextRequest) {
