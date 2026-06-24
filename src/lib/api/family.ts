@@ -34,10 +34,22 @@ export async function createFamily(
     return { family: null, error: '이미 가족이 연결되어 있어요.' }
   }
 
+  // seq 최댓값 조회 — seq=NULL 행(밀로네 마스코트 가정)은 제외하고 실제 가정만 카운트
+  const { data: seqRow } = await supabase
+    .from('families')
+    .select('seq')
+    .not('seq', 'is', null)
+    .order('seq', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  // 기존 seq 있는 행이 없으면 1, 있으면 MAX + 1
+  const nextSeq = (seqRow?.seq ?? 0) + 1
+
   // 1) families 테이블에 새 행 추가
   const { data: familyRow, error: familyErr } = await supabase
     .from('families')
-    .insert({ name: familyName, created_by: userId })
+    .insert({ name: familyName, created_by: userId, seq: nextSeq })
     .select('id, name, description, avatar_url, created_by, created_at')
     .single()
 
