@@ -25,6 +25,8 @@ export interface EventPost {
   // 작성자 프로필 (join)
   author_nickname: string | null
   author_avatar_url: string | null
+  author_avatar_focal_x?: number | null
+  author_avatar_focal_y?: number | null
 }
 
 /** likes 테이블 기반 행사 참여 신청 레코드 */
@@ -60,6 +62,8 @@ function rowToEventPost(p: any): EventPost {
     event_is_closed:        p.event_is_closed ?? false,
     author_nickname:        p.users?.nickname ?? null,
     author_avatar_url:      p.users?.avatar_url ?? null,
+    author_avatar_focal_x:  p.users?.avatar_focal_x ?? 50,
+    author_avatar_focal_y:  p.users?.avatar_focal_y ?? 50,
   }
 }
 
@@ -72,7 +76,7 @@ function rowToEventPost(p: any): EventPost {
 export async function getEventPosts(): Promise<EventPost[]> {
   const { data, error } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url)')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .eq('post_type', 'event')
     .eq('visibility', 'public')
     .is('deleted_at', null)
@@ -100,7 +104,7 @@ export async function getManagedEventPosts(
 ): Promise<EventPost[]> {
   let query = supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url)')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .eq('post_type', 'event')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -127,7 +131,7 @@ export async function getManagedEventPosts(
 export async function getEventPostById(id: string): Promise<EventPost | null> {
   const { data, error } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url)')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .eq('id', id)
     .eq('post_type', 'event')
     .is('deleted_at', null)
@@ -225,7 +229,7 @@ export async function getMyEventJoins(userId: string): Promise<EventPost[]> {
   // 신청한 행사 글 상세 조회
   const { data: posts, error: postsError } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url)')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .in('id', postIds)
     .eq('post_type', 'event')
     .is('deleted_at', null)

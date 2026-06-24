@@ -12,6 +12,8 @@ interface User {
   name: string
   email: string
   avatar: string
+  avatarFocalX?: number
+  avatarFocalY?: number
   points: number
   status: string
   tier: string
@@ -57,6 +59,8 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
     name: authUser.user_metadata?.full_name || '',
     email: authUser.email || '',
     avatar: authUser.user_metadata?.avatar_url || '',
+    avatarFocalX: 50,
+    avatarFocalY: 50,
     points: 0,
     status: '',
     tier: '',
@@ -70,7 +74,7 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
   }
 
   try {
-    const dbUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=id,nickname,avatar_url,bio,role,tier,merit_total,family_id,created_at,life_stage,family_start_date,visibility&limit=1`
+    const dbUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${authUser.id}&select=id,nickname,avatar_url,avatar_focal_x,avatar_focal_y,bio,role,tier,merit_total,family_id,created_at,life_stage,family_start_date,visibility&limit=1`
     const dbRes = await fetch(dbUrl, {
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -88,6 +92,8 @@ async function buildUser(authUser: { id: string; email?: string; user_metadata?:
       ...fallback,
       nickname: data.nickname || fallback.nickname,
       avatar: data.avatar_url || fallback.avatar,
+      avatarFocalX: data.avatar_focal_x ?? fallback.avatarFocalX,
+      avatarFocalY: data.avatar_focal_y ?? fallback.avatarFocalY,
       points: data.merit_total ?? 0,
       status: data.bio || '',
       tier: data.tier || '',

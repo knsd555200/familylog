@@ -7,6 +7,8 @@ export type Family = {
   name: string
   description: string | null
   avatar_url: string | null
+  avatar_focal_x?: number | null
+  avatar_focal_y?: number | null
   created_by: string | null
   created_at: string
 }
@@ -15,6 +17,8 @@ export type FamilyAvatarSummary = {
   id: string
   name: string
   avatar_url: string | null
+  avatar_focal_x?: number | null
+  avatar_focal_y?: number | null
   seq: number | null
 }
 
@@ -50,7 +54,7 @@ export async function createFamily(
   const { data: familyRow, error: familyErr } = await supabase
     .from('families')
     .insert({ name: familyName, created_by: userId, seq: nextSeq })
-    .select('id, name, description, avatar_url, created_by, created_at')
+    .select('id, name, description, avatar_url, avatar_focal_x, avatar_focal_y, created_by, created_at')
     .single()
 
   if (familyErr || !familyRow) {
@@ -264,7 +268,7 @@ export async function getFamilyName(familyId: string): Promise<string | null> {
 export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
   const { data, error } = await supabase
     .from('families')
-    .select('id, name, avatar_url, seq')
+    .select('id, name, avatar_url, avatar_focal_x, avatar_focal_y, seq')
     .order('seq', { ascending: true })
 
   if (error || !data) return []
@@ -273,6 +277,8 @@ export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
     id: family.id,
     name: family.name,
     avatar_url: family.avatar_url ?? null,
+    avatar_focal_x: family.avatar_focal_x ?? 50,
+    avatar_focal_y: family.avatar_focal_y ?? 50,
     seq: family.seq ?? null,
   }))
 }
@@ -285,14 +291,16 @@ export async function getFamilyIdentity(
   name: string
   seq: number | null
   avatarUrl: string | null
+  avatarFocalX?: number | null
+  avatarFocalY?: number | null
   welcomeMessage: string | null
   description: string | null
   createdAt: string
-  members: { userId: string; nickname: string; avatar: string | null }[]
+  members: { userId: string; nickname: string; avatar: string | null; avatarFocalX?: number | null; avatarFocalY?: number | null }[]
 } | null> {
   const { data } = await supabase
     .from('families')
-    .select('name, seq, avatar_url, welcome_message, description, created_at')
+    .select('name, seq, avatar_url, avatar_focal_x, avatar_focal_y, welcome_message, description, created_at')
     .eq('id', familyId)
     .maybeSingle() // 결과 없을 때 406 방지
   if (!data) return null
@@ -300,7 +308,7 @@ export async function getFamilyIdentity(
   // 활성 멤버 조회 — user_id/invited_by FK 모호성 방지를 위해 FK 이름 명시
   const { data: members } = await supabase
     .from('family_members')
-    .select('user_id, users!family_members_user_id_fkey(nickname, avatar_url)')
+    .select('user_id, users!family_members_user_id_fkey(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .eq('family_id', familyId)
     .eq('status', 'active')
 
@@ -310,12 +318,16 @@ export async function getFamilyIdentity(
       userId:   m.user_id as string,
       nickname: (m.users as any).nickname  ?? '가족',
       avatar:   (m.users as any).avatar_url ?? null,
+      avatarFocalX: (m.users as any).avatar_focal_x ?? 50,
+      avatarFocalY: (m.users as any).avatar_focal_y ?? 50,
     }))
 
   return {
     name:           data.name,
     seq:            data.seq ?? null,
     avatarUrl:      (data as any).avatar_url ?? null,
+    avatarFocalX:   (data as any).avatar_focal_x ?? 50,
+    avatarFocalY:   (data as any).avatar_focal_y ?? 50,
     welcomeMessage: (data as any).welcome_message ?? null,
     description:    data.description ?? null,
     createdAt:      data.created_at,
@@ -364,6 +376,8 @@ export interface FamilyMemberStats {
   userId: string
   nickname: string
   avatar: string | null
+  avatarFocalX?: number | null
+  avatarFocalY?: number | null
   points: number
 }
 
@@ -391,7 +405,7 @@ export async function getFamilyStats(familyId: string): Promise<FamilyStats | nu
   // users로 가는 FK가 2개(user_id, invited_by)라 임베드가 모호 → user_id FK 명시 (PGRST201 방지)
   const { data: members } = await supabase
     .from('family_members')
-    .select('user_id, users!family_members_user_id_fkey(nickname, avatar_url, merit_total)')
+    .select('user_id, users!family_members_user_id_fkey(nickname, avatar_url, avatar_focal_x, avatar_focal_y, merit_total)')
     .eq('family_id', familyId)
     .eq('status', 'active')
 
@@ -401,6 +415,8 @@ export async function getFamilyStats(familyId: string): Promise<FamilyStats | nu
       userId:   m.user_id as string,
       nickname: (m.users as any).nickname     ?? '가족',
       avatar:   (m.users as any).avatar_url    ?? null,
+      avatarFocalX: (m.users as any).avatar_focal_x ?? 50,
+      avatarFocalY: (m.users as any).avatar_focal_y ?? 50,
       points:   (m.users as any).merit_total   ?? 0,
     }))
 
@@ -433,6 +449,8 @@ export interface FamilyPostItem {
   author_id: string
   authorNickname: string
   authorAvatar: string | null
+  authorAvatarFocalX?: number | null
+  authorAvatarFocalY?: number | null
 }
 
 // 가족 구성원 전체 글 조회 — offset 기반 페이지네이션, count: 'exact'로 총 건수 동시 반환
@@ -458,7 +476,7 @@ export async function getFamilyPosts(
   const { data, count } = await supabase
     .from('posts')
     .select(
-      'id, title, content, media_urls, thumbnail_url, like_count, comment_count, created_at, visibility, author_id, users(nickname, avatar_url)',
+      'id, title, content, media_urls, thumbnail_url, like_count, comment_count, created_at, visibility, author_id, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y)',
       { count: 'exact' },
     )
     .in('author_id', memberIds)
@@ -482,6 +500,8 @@ export async function getFamilyPosts(
       author_id:      p.author_id,
       authorNickname: (p.users as any)?.nickname  ?? '가족',
       authorAvatar:   (p.users as any)?.avatar_url ?? null,
+      authorAvatarFocalX: (p.users as any)?.avatar_focal_x ?? 50,
+      authorAvatarFocalY: (p.users as any)?.avatar_focal_y ?? 50,
     })),
     totalCount: count ?? 0,
   }

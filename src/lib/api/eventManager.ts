@@ -17,6 +17,8 @@ export interface EventManagerApplication {
   // 신청자 프로필 (join)
   applicant_nickname?: string | null
   applicant_avatar?: string | null
+  applicant_avatar_focal_x?: number | null
+  applicant_avatar_focal_y?: number | null
 }
 
 // ─── 권한 헬퍼 ────────────────────────────────────────────────────────────────
@@ -93,7 +95,7 @@ export async function getPendingApplications(): Promise<EventManagerApplication[
   // users로 가는 FK가 2개(user_id, reviewed_by)라 임베드가 모호 → user_id FK 명시 (PGRST201 방지)
   const { data, error } = await supabase
     .from('event_manager_applications')
-    .select('*, users!event_manager_applications_user_id_fkey(nickname, avatar_url)')
+    .select('*, users!event_manager_applications_user_id_fkey(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
 
@@ -110,6 +112,8 @@ export async function getPendingApplications(): Promise<EventManagerApplication[
     reviewed_at:       r.reviewed_at ?? null,
     applicant_nickname: r.users?.nickname ?? null,
     applicant_avatar:   r.users?.avatar_url ?? null,
+    applicant_avatar_focal_x: r.users?.avatar_focal_x ?? 50,
+    applicant_avatar_focal_y: r.users?.avatar_focal_y ?? 50,
   }))
 }
 

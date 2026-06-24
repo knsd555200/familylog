@@ -46,6 +46,8 @@ export interface CommentPreview {
   postId: string
   author: string
   avatar: string
+  avatarFocalX?: number
+  avatarFocalY?: number
   content: string
   likeCount: number
   createdAt: string
@@ -65,7 +67,7 @@ export async function getCommentPreviews(
 
   const { data, error } = await supabase
     .from('comments')
-    .select('id, post_id, content, like_count, created_at, author:users(nickname, avatar_url)')
+    .select('id, post_id, content, like_count, created_at, author:users(nickname, avatar_url, avatar_focal_x, avatar_focal_y)')
     .in('post_id', validIds)
     .is('deleted_at', null)
 
@@ -93,6 +95,8 @@ export async function getCommentPreviews(
       postId: c.post_id,
       author: c.author?.nickname ?? '패밀로그 회원',
       avatar: c.author?.avatar_url ?? '',
+      avatarFocalX: c.author?.avatar_focal_x ?? 50,
+      avatarFocalY: c.author?.avatar_focal_y ?? 50,
       content: c.content,
       likeCount: c.like_count ?? 0,
       createdAt: c.created_at,
@@ -109,6 +113,8 @@ function dbToFeedPost(p: any): FeedPost {
     author: {
       nickname: p.users?.nickname ?? '패밀로그 회원',
       avatar: p.users?.avatar_url ?? 'https://i.pravatar.cc/100?img=30',
+      avatarFocalX: p.users?.avatar_focal_x ?? 50,
+      avatarFocalY: p.users?.avatar_focal_y ?? 50,
       status: p.users?.bio ?? '',
     },
     title: p.title,
@@ -121,6 +127,8 @@ function dbToFeedPost(p: any): FeedPost {
     familyName: p.users?.family?.name ?? null,
     familyId: p.users?.family_id ?? p.users?.family?.id ?? null,
     familyAvatar: p.users?.family?.avatar_url ?? null,
+    familyAvatarFocalX: p.users?.family?.avatar_focal_x ?? 50,
+    familyAvatarFocalY: p.users?.family?.avatar_focal_y ?? 50,
     // DB post_type 전달 — CommentDrawer에서 event 여부 판단에 사용
     postType: p.post_type ?? undefined,
     createdAt: p.created_at,
@@ -136,6 +144,8 @@ function dbToCommunityPost(p: any): CommunityPost {
     content: p.content ?? '',
     author: p.users?.nickname ?? '패밀로그 회원',
     avatar: p.users?.avatar_url ?? 'https://i.pravatar.cc/100?img=30',
+    avatarFocalX: p.users?.avatar_focal_x ?? 50,
+    avatarFocalY: p.users?.avatar_focal_y ?? 50,
     status: p.users?.bio ?? '',
     time: formatTime(p.created_at),
     likes: p.like_count ?? 0,
@@ -152,7 +162,7 @@ function dbToCommunityPost(p: any): CommunityPost {
 export async function getDbFeedPosts(): Promise<FeedPost[]> {
   const { data, error } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url, bio, role, tier, family_id, family:families!users_family_id_fkey(id, name, avatar_url))')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y, bio, role, tier, family_id, family:families!users_family_id_fkey(id, name, avatar_url, avatar_focal_x, avatar_focal_y))')
     .eq('visibility', 'public')
     .neq('post_type', 'event')
     .is('deleted_at', null)
@@ -210,7 +220,7 @@ export async function getDbFeedPosts(): Promise<FeedPost[]> {
 export async function getDbCommunityPosts(): Promise<CommunityPost[]> {
   const { data, error } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url, bio)')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y, bio)')
     .eq('post_type', 'text')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -242,7 +252,7 @@ export async function getFamilyFeedPosts(familyId: string): Promise<FeedPost[]> 
   // 멤버가 쓴 public/family 글 + 가족 공개(family) 글 (private는 본인만 볼 수 있으므로 제외)
   const { data, error } = await supabase
     .from('posts')
-    .select('*, users(nickname, avatar_url, bio, role, tier)')
+    .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y, bio, role, tier)')
     .neq('post_type', 'event')
     .is('deleted_at', null)
     .or(
@@ -605,6 +615,8 @@ export interface DbComment {
   author?: {
     nickname: string
     avatar_url: string
+    avatar_focal_x?: number
+    avatar_focal_y?: number
     bio: string
   }
 }
@@ -614,7 +626,7 @@ export async function getComments(postId: string): Promise<DbComment[]> {
 
   const { data, error } = await supabase
     .from('comments')
-    .select('*, author:users(nickname, avatar_url, bio)')
+    .select('*, author:users(nickname, avatar_url, avatar_focal_x, avatar_focal_y, bio)')
     .eq('post_id', postId)
     .order('created_at', { ascending: true })
 
