@@ -8,6 +8,7 @@ import { toggleLike, getComments, createComment, type DbComment } from '@/lib/ap
 import { supabase } from '@/lib/supabase'
 import PostMenu from '@/components/community/PostMenu'
 import { ChevronLeft, Calendar, MapPin, Users, Clock, Heart, CheckCircle, Send, Camera } from 'lucide-react'
+import { focal } from '@/lib/avatarFocal'
 
 // start_at ~ end_at을 한국어 날짜 문자열로 포맷
 function formatDateRange(startAt: string | null, endAt: string | null): string {
@@ -389,7 +390,7 @@ export default function EventDetailPage() {
               dbComments.filter(c => !c.parent_comment_id).map(c => (
                 <div key={c.id}>
                   <div className="flex gap-2.5">
-                    <img src={c.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                    <img src={c.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={focal(c.author?.avatar_focal_x, c.author?.avatar_focal_y)} />
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-medium">{c.author?.nickname ?? '패밀로그 회원'}</span>
                       <p className="text-sm leading-relaxed mt-0.5">{c.content}</p>
@@ -406,7 +407,7 @@ export default function EventDetailPage() {
                   </div>
                   {dbComments.filter(r => r.parent_comment_id === c.id).map(r => (
                     <div key={r.id} className="ml-10 mt-3 pl-3 border-l-2 border-brand-line flex gap-2.5">
-                      <img src={r.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                      <img src={r.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" style={focal(r.author?.avatar_focal_x, r.author?.avatar_focal_y)} />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-medium">{r.author?.nickname ?? '패밀로그 회원'}</span>
                         <p className="text-sm leading-relaxed mt-0.5">{r.content}</p>
@@ -431,7 +432,7 @@ export default function EventDetailPage() {
             </div>
           )}
           <div className="flex items-center gap-2 mb-2">
-            <img src={user?.avatar ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
+            <img src={user?.avatar ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" style={focal(user?.avatarFocalX, user?.avatarFocalY)} />
             <div className="flex-1 flex items-center bg-brand-card rounded-full pr-1">
               <input
                 value={comment}

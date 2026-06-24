@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Heart, MessageCircle, Share2, Bookmark, Play, Lock, Volume2, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FeedPost } from '@/types/post'
 import { MILONE_SYSTEM_USER_ID } from '@/lib/constants'
+import { focal } from '@/lib/avatarFocal'
 
 const CATEGORY_LABEL: Record<string, string> = {
   daily: '일상',
@@ -141,7 +142,7 @@ export default function FeedCard({
       {!isLocked && (
         <div className="absolute left-0 right-16 bottom-20 lg:bottom-12 px-4 z-20 cursor-pointer" onClick={handleCardClick}>
           <div className="flex items-center gap-2 mb-3">
-            <img src={post.author.avatar} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-white/30" />
+            <img src={post.author.avatar} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-white/30" style={focal(post.author.avatarFocalX, post.author.avatarFocalY)} />
             <div>
               <div className="text-white font-medium text-sm leading-tight">{post.author.nickname}</div>
               <div className="text-white/70 text-[11px]">{post.author.status}</div>

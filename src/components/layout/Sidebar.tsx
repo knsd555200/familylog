@@ -7,6 +7,7 @@ import { Home, User, Bell, LogOut, LogIn } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import AuthSheet from '@/components/auth/AuthSheet'
 import { resolveHomePath } from '@/lib/resolveHome'
+import { focal } from '@/lib/avatarFocal'
 
 // 사이드바 탭 — 미션은 마이페이지 발자취 탭 내부로 이설
 const tabs = [
@@ -50,7 +51,7 @@ export default function Sidebar() {
       <div className="border-t border-brand-line pt-4 mt-4">
         {isLoggedIn && user ? (
           <div className="flex items-center gap-3 px-2">
-            <img src={user.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+            <img src={user.avatar} alt="" className="w-9 h-9 rounded-full object-cover" style={focal(user.avatarFocalX, user.avatarFocalY)} />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{user.nickname}</div>
               <div className="text-xs text-brand-muted">🌿 {user.points}P</div>

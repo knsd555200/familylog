@@ -7,6 +7,7 @@ import { communityPosts } from '@/data/community'
 import { getComments, createComment, deleteComment, getMyCommentLikes, toggleCommentLike, type DbComment } from '@/lib/api/posts'
 import { uploadImages } from '@/lib/upload'
 import { useAuth } from '@/context/AuthContext'
+import { focal } from '@/lib/avatarFocal'
 
 interface Props {
   post: FeedPost | null
@@ -309,7 +310,7 @@ export default function CommentDrawer({ post, onClose, onCommentCountChange, pos
             ) : (
               mockPost.commentList.map(c => (
                 <div key={c.id} className="flex gap-2.5">
-                  <img src={c.avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                  <img src={c.avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={focal(c.avatarFocalX, c.avatarFocalY)} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-brand-text">{c.author}</span>
@@ -351,6 +352,7 @@ export default function CommentDrawer({ post, onClose, onCommentCountChange, pos
                       src={c.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'}
                       alt=""
                       className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                      style={focal(c.author?.avatar_focal_x, c.author?.avatar_focal_y)}
                     />
                   )}
                   <div className={`flex-1 min-w-0 ${c.deleted_at ? 'ml-10' : ''}`}>
@@ -446,6 +448,7 @@ export default function CommentDrawer({ post, onClose, onCommentCountChange, pos
               src={user?.avatar || 'https://i.pravatar.cc/100?img=30'}
               alt=""
               className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              style={focal(user?.avatarFocalX, user?.avatarFocalY)}
             />
 
             {/* event 글 댓글일 때만 카메라 버튼 노출 */}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { Award, Calendar, Heart, MessageSquare, ShoppingBag, Settings, ChevronRight, LogOut, Bell, Globe, Lock, Pencil, BookOpen, Sparkles } from 'lucide-react'
+import { focal } from '@/lib/avatarFocal'
 
 const POINT_HISTORY = [
   { id: 'h1', label: '주간 미션 보너스', points: 100, time: '5일 전', type: 'gain' },
@@ -66,7 +67,7 @@ export default function MyPage() {
       <section className="px-4 lg:px-6 pt-4 pb-6 bg-gradient-to-br from-brand-green to-brand-green-dark">
         <div className="flex items-center gap-4 text-white">
           <div className="relative">
-            <img src={user!.avatar} alt="" className="w-16 h-16 rounded-full object-cover border-3 border-white/30" />
+            <img src={user!.avatar} alt="" className="w-16 h-16 rounded-full object-cover border-3 border-white/30" style={focal(user!.avatarFocalX, user!.avatarFocalY)} />
             <button className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center text-brand-green">
               <Pencil size={11} />
             </button>

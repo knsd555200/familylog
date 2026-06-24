@@ -3,6 +3,7 @@ import { useState, useRef, useCallback } from 'react'
 import { Camera, X } from 'lucide-react'
 import { updateFamilyIdentity } from '@/lib/api/family'
 import { uploadImages } from '@/lib/upload'
+import { focal } from '@/lib/avatarFocal'
 
 /**
  * 가족 정체성 편집 시트. 대표 사진·환영 문구·가족 공지·가정명을 다룬다.
@@ -14,6 +15,8 @@ export default function EditFamilyIdentitySheet({
   initialWelcomeMessage,
   initialDescription,
   initialAvatarUrl,
+  initialAvatarFocalX,
+  initialAvatarFocalY,
   onClose,
   onSaved,
 }: {
@@ -22,6 +25,8 @@ export default function EditFamilyIdentitySheet({
   initialWelcomeMessage: string | null
   initialDescription: string | null
   initialAvatarUrl: string | null
+  initialAvatarFocalX?: number | null
+  initialAvatarFocalY?: number | null
   onClose: () => void
   onSaved: () => void
 }) {
@@ -105,7 +110,7 @@ export default function EditFamilyIdentitySheet({
             className="relative w-20 aspect-[3/4] rounded-xl overflow-hidden bg-brand-green-light border border-brand-line flex-shrink-0"
           >
             {avatarPreview ? (
-              <img src={avatarPreview} alt="" className="w-full h-full object-cover" />
+              <img src={avatarPreview} alt="" className="w-full h-full object-cover" style={focal(initialAvatarFocalX, initialAvatarFocalY)} />
             ) : (
               <div className="w-full h-full bg-brand-green flex items-center justify-center">
                 <span className="text-2xl text-white">{name.trim().charAt(0) || '가'}</span>

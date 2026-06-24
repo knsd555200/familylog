@@ -5,6 +5,7 @@ import { ArrowLeft, Camera, Check } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { uploadImages } from '@/lib/upload'
+import { focal } from '@/lib/avatarFocal'
 
 const LIFE_STAGES = [
   { id: 'pre_married', label: '예비부부', icon: '💍' },
@@ -134,7 +135,7 @@ export default function ProfileEditPage() {
             className="relative"
           >
             {displayAvatar ? (
-              <img src={displayAvatar} alt="" className="w-24 h-24 rounded-full object-cover border-2 border-brand-line" />
+              <img src={displayAvatar} alt="" className="w-24 h-24 rounded-full object-cover border-2 border-brand-line" style={focal(user?.avatarFocalX, user?.avatarFocalY)} />
             ) : (
               <div className="w-24 h-24 rounded-full bg-brand-card flex items-center justify-center border-2 border-brand-line" />
             )}

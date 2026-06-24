@@ -7,6 +7,7 @@ import {
   getPendingApplications, approveApplication, rejectApplication,
   type EventManagerApplication,
 } from '@/lib/api/eventManager'
+import { focal } from '@/lib/avatarFocal'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -88,7 +89,7 @@ export default function EventManagerReviewPage() {
               {/* 신청자 + 단체명 */}
               <div className="flex items-center gap-2 mb-3">
                 {app.applicant_avatar
-                  ? <img src={app.applicant_avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                  ? <img src={app.applicant_avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={focal(app.applicant_avatar_focal_x, app.applicant_avatar_focal_y)} />
                   : <div className="w-8 h-8 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0">
                       <span className="text-[10px] text-white">{(app.applicant_nickname ?? '?').charAt(0)}</span>
                     </div>

@@ -24,6 +24,7 @@ import ShareMenu from '@/components/community/ShareMenu'
 import { MILONE_SYSTEM_USER_ID } from '@/lib/constants'
 import CommentDrawer from '@/components/feed/CommentDrawer'
 import { byNewest, makePopularComparator, type SortMode } from '@/lib/feed/ranking'
+import { focal } from '@/lib/avatarFocal'
 
 function useDragScroll() {
   const ref = useRef<HTMLDivElement>(null)
@@ -135,6 +136,8 @@ interface CardPost {
   preview: string
   authorName: string
   authorAvatar: string
+  authorAvatarFocalX?: number
+  authorAvatarFocalY?: number
   authorStatus: string
   category: string
   images: string[]
@@ -144,6 +147,8 @@ interface CardPost {
   familyName?: string | null
   familyId?: string | null
   familyAvatar?: string | null
+  familyAvatarFocalX?: number | null
+  familyAvatarFocalY?: number | null
   postType?: string
   createdAt?: string
 }
@@ -152,23 +157,29 @@ type StoryFamilyAvatar = {
   id: string
   name: string
   avatarUrl: string | null
+  avatarFocalX?: number | null
+  avatarFocalY?: number | null
   latestCreatedAt?: string
 }
 
 function StoryFamilyCard({
   name,
   avatarUrl,
+  avatarFocalX,
+  avatarFocalY,
   className = '',
 }: {
   name: string
   avatarUrl: string | null
+  avatarFocalX?: number | null
+  avatarFocalY?: number | null
   className?: string
 }) {
   return (
     <div className={`relative aspect-[3/4] rounded-xl overflow-hidden border border-brand-green/15 bg-brand-green-light/60 shadow-sm ${className}`}>
       <div className="absolute inset-0">
         {avatarUrl
-          ? <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+          ? <img src={avatarUrl} alt={name} className="w-full h-full object-cover" style={focal(avatarFocalX, avatarFocalY)} />
           : <div className="w-full h-full bg-brand-green flex items-center justify-center">
               <span className="text-3xl text-white">{name.charAt(0)}</span>
             </div>
@@ -216,7 +227,7 @@ function StoryFamilyDirectoryModal({
         // 가족 전체 목록은 아직 이동 경로가 없어 카드도 비클릭으로만 보여준다.
         <div className="grid grid-cols-3 lg:grid-cols-5 gap-3 max-h-[58vh] overflow-y-auto pr-1">
           {families.map(family => (
-            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} className="w-full" />
+            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} avatarFocalX={family.avatar_focal_x} avatarFocalY={family.avatar_focal_y} className="w-full" />
           ))}
         </div>
       )}
@@ -283,6 +294,8 @@ function feedToCard(p: FeedPost): CardPost {
     preview: p.description,
     authorName: p.author.nickname,
     authorAvatar: p.author.avatar,
+    authorAvatarFocalX: p.author.avatarFocalX,
+    authorAvatarFocalY: p.author.avatarFocalY,
     authorStatus: p.author.status,
     category: getCategoryLabel(p.category),
     images: p.images.length > 0 ? p.images : p.videoThumb ? [p.videoThumb] : [],
@@ -292,6 +305,8 @@ function feedToCard(p: FeedPost): CardPost {
     familyName: p.familyName ?? null,
     familyId: p.familyId ?? null,
     familyAvatar: p.familyAvatar ?? null,
+    familyAvatarFocalX: p.familyAvatarFocalX ?? 50,
+    familyAvatarFocalY: p.familyAvatarFocalY ?? 50,
     postType: p.postType,
     createdAt: p.createdAt,
   }
@@ -304,6 +319,8 @@ function communityToCard(p: CommunityPost): CardPost {
     preview: p.content,
     authorName: p.author,
     authorAvatar: p.avatar,
+    authorAvatarFocalX: p.avatarFocalX,
+    authorAvatarFocalY: p.avatarFocalY,
     authorStatus: p.status,
     category: getCategoryLabel(p.category),
     images: p.mediaUrls && p.mediaUrls.length > 0 ? p.mediaUrls : p.thumbnail ? [p.thumbnail] : [],
@@ -489,7 +506,7 @@ function CommunityPageContent() {
   // 활성 가족 멤버 수 — 초대 배너 자가소멸 판정 (1명일 때만 배너)
   const [familyMemberCount, setFamilyMemberCount] = useState<number | null>(null)
   // 가족 정체성(이름·일수·기수·소개·대표 사진) — 상단 영역용. null = 아직 미조회(로딩 스켈레톤)
-  const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; avatarUrl: string | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null }[] } | null>(null)
+  const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; avatarUrl: string | null; avatarFocalX?: number | null; avatarFocalY?: number | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null; avatarFocalX?: number | null; avatarFocalY?: number | null }[] } | null>(null)
   // 이야기 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체 목록은 모달 최초 진입 때만 별도 조회한다.
   const [showAllFamiliesModal, setShowAllFamiliesModal] = useState(false)
   const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
@@ -810,6 +827,8 @@ function CommunityPageContent() {
           id: post.familyId,
           name: post.familyName,
           avatarUrl: post.familyAvatar ?? null,
+          avatarFocalX: post.familyAvatarFocalX ?? 50,
+          avatarFocalY: post.familyAvatarFocalY ?? 50,
           latestCreatedAt: post.createdAt,
         })
       }
@@ -881,7 +900,7 @@ function CommunityPageContent() {
     return {
       id: activeCardPost.id,
       type: 'text',
-      author: { nickname: activeCardPost.authorName, avatar: activeCardPost.authorAvatar, status: activeCardPost.authorStatus },
+      author: { nickname: activeCardPost.authorName, avatar: activeCardPost.authorAvatar, status: activeCardPost.authorStatus, avatarFocalX: activeCardPost.authorAvatarFocalX, avatarFocalY: activeCardPost.authorAvatarFocalY },
       title: activeCardPost.title,
       description: activeCardPost.preview,
       images: activeCardPost.images,
@@ -1201,7 +1220,7 @@ function CommunityPageContent() {
                   <div className="flex items-center gap-2">
                     {familyIdentity.members.slice(0, 6).map(m => (
                       m.avatar
-                        ? <img key={m.userId} src={m.avatar} alt={m.nickname} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-brand-green-light" />
+                        ? <img key={m.userId} src={m.avatar} alt={m.nickname} className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 ring-brand-green-light" style={focal(m.avatarFocalX, m.avatarFocalY)} />
                         : <div key={m.userId} className="w-9 h-9 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0 ring-2 ring-brand-green-light">
                             <span className="text-[11px] text-white">{m.nickname.charAt(0)}</span>
                           </div>
@@ -1251,6 +1270,8 @@ function CommunityPageContent() {
                     key={family.id}
                     name={family.name}
                     avatarUrl={family.avatarUrl}
+                    avatarFocalX={family.avatarFocalX}
+                    avatarFocalY={family.avatarFocalY}
                     className="w-24 flex-shrink-0"
                   />
                 ))}
@@ -1387,7 +1408,7 @@ function CommunityPageContent() {
                         className="flex items-center gap-2 mb-3"
                         onClick={isMilone ? (e) => { e.preventDefault(); e.stopPropagation() } : undefined}
                       >
-                        <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                        <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" style={focal(post.authorAvatarFocalX, post.authorAvatarFocalY)} />
                         <div className="flex-1 min-w-0">
                           {feedTab === '이야기' ? (
                             post.familyName ? (
@@ -1524,7 +1545,7 @@ function CommunityPageContent() {
                         {previews.map(c => (
                           <div key={c.id} className="flex items-start gap-2">
                             {c.avatar
-                              ? <img src={c.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0 mt-0.5" />
+                              ? <img src={c.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0 mt-0.5" style={focal(c.avatarFocalX, c.avatarFocalY)} />
                               : <div className="w-6 h-6 rounded-full bg-brand-green/15 flex items-center justify-center flex-shrink-0 mt-0.5">
                                   <span className="text-[10px] font-medium text-brand-green">{c.author.charAt(0)}</span>
                                 </div>
@@ -1599,6 +1620,7 @@ function CommunityPageContent() {
                             src={user.avatar || `https://picsum.photos/seed/${user.id}/100/100`}
                             alt=""
                             className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+                            style={focal(user.avatarFocalX, user.avatarFocalY)}
                           />
                         ) : (
                           // 비로그인: 패밀로그 로고를 아바타 자리에
@@ -1658,6 +1680,8 @@ function CommunityPageContent() {
           initialWelcomeMessage={familyIdentity.welcomeMessage}
           initialDescription={familyIdentity.description}
           initialAvatarUrl={familyIdentity.avatarUrl}
+          initialAvatarFocalX={familyIdentity.avatarFocalX}
+          initialAvatarFocalY={familyIdentity.avatarFocalY}
           onClose={handleEditIdentityClose}
           onSaved={handleEditIdentitySaved}
         />

@@ -22,6 +22,7 @@ import {
   formatRelativeDate, fmtDate, buildMilestones, buildUpcoming, calcStreakWeeks,
   type Milestone, type MeritItem, type GrowthStats,
 } from '@/lib/growth'
+import { focal } from '@/lib/avatarFocal'
 
 // ── 생애주기 라벨 ────────────────────────────────────────────────────────────
 const LIFE_STAGE_LABELS: Record<string, string> = {
@@ -399,7 +400,7 @@ export default function MypagePage() {
 
             {/* 아바타 — 없으면 이니셜 그린 원 */}
             {user.avatar
-              ? <img src={user.avatar} alt="" className="w-24 h-24 rounded-full object-cover ring-1 ring-brand-line" />
+              ? <img src={user.avatar} alt="" className="w-24 h-24 rounded-full object-cover ring-1 ring-brand-line" style={focal(user.avatarFocalX, user.avatarFocalY)} />
               : <div className="w-24 h-24 rounded-full bg-brand-green flex items-center justify-center">
                   <span className="font-serif text-3xl text-white">{user.nickname.charAt(0)}</span>
                 </div>
@@ -441,7 +442,7 @@ export default function MypagePage() {
               <div className="flex items-center justify-center gap-2 mt-5">
                 {others.slice(0, 6).map(m => (
                   m.avatar
-                    ? <img key={m.userId} src={m.avatar} alt={m.nickname} className="w-9 h-9 rounded-full object-cover" />
+                    ? <img key={m.userId} src={m.avatar} alt={m.nickname} className="w-9 h-9 rounded-full object-cover" style={focal(m.avatarFocalX, m.avatarFocalY)} />
                     : <div key={m.userId} className="w-9 h-9 rounded-full bg-brand-green flex items-center justify-center">
                         <span className="text-[11px] text-white">{m.nickname.charAt(0)}</span>
                       </div>
@@ -717,7 +718,7 @@ export default function MypagePage() {
                           <div key={member.userId} className="mb-3 last:mb-0">
                             <div className="flex items-center gap-2 mb-1">
                               {member.avatar
-                                ? <img src={member.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                                ? <img src={member.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" style={focal(member.avatarFocalX, member.avatarFocalY)} />
                                 : <div className="w-6 h-6 rounded-full bg-brand-green flex items-center justify-center flex-shrink-0">
                                     <span className="text-[10px] text-white">{member.nickname.charAt(0)}</span>
                                   </div>

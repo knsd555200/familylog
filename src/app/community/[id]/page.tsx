@@ -12,6 +12,7 @@ import { toggleLike, getComments, createComment, DbComment, getPostVisibility } 
 import PostMenu from '@/components/community/PostMenu'
 import ShareMenu from '@/components/community/ShareMenu'
 import { MILONE_SYSTEM_USER_ID } from '@/lib/constants'
+import { focal } from '@/lib/avatarFocal'
 
 const CATEGORY_LABEL: Record<string, string> = {
   daily: '일상',
@@ -70,7 +71,7 @@ export default function CommunityDetailPage() {
 
     supabase
       .from('posts')
-      .select('*, users(nickname, avatar_url, bio)')
+      .select('*, users(nickname, avatar_url, avatar_focal_x, avatar_focal_y, bio)')
       .eq('id', id)
       .single()
       .then(async ({ data, error }) => {
@@ -97,6 +98,8 @@ export default function CommunityDetailPage() {
           content: data.content ?? '',
           author: data.users?.nickname ?? '패밀로그 회원',
           avatar: data.users?.avatar_url ?? 'https://i.pravatar.cc/100?img=30',
+          avatarFocalX: data.users?.avatar_focal_x ?? 50,
+          avatarFocalY: data.users?.avatar_focal_y ?? 50,
           status: data.users?.bio ?? '',
           time: formatTime(data.created_at),
           likes: data.like_count ?? 0,
@@ -213,7 +216,7 @@ export default function CommunityDetailPage() {
 
       <div className="px-4 lg:px-6 py-5">
         <div className="flex items-center gap-3 mb-4">
-          <img src={post.avatar} alt="" className="w-11 h-11 rounded-full object-cover" />
+          <img src={post.avatar} alt="" className="w-11 h-11 rounded-full object-cover" style={focal(post.avatarFocalX, post.avatarFocalY)} />
           <div className="flex-1">
             <div className="font-medium text-sm">{post.author}</div>
             <div className="text-[11px] text-brand-muted">{post.status} · {post.time}</div>
@@ -383,7 +386,7 @@ export default function CommunityDetailPage() {
                 post.commentList.map(c => (
                   <div key={c.id}>
                     <div className="flex gap-2.5">
-                      <img src={c.avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      <img src={c.avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={focal(c.avatarFocalX, c.avatarFocalY)} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                           <span className="text-xs font-medium">{c.author}</span>
@@ -400,7 +403,7 @@ export default function CommunityDetailPage() {
                       <div className="ml-10 mt-3 space-y-3 pl-3 border-l-2 border-brand-line">
                         {c.replies.map(r => (
                           <div key={r.id} className="flex gap-2.5">
-                            <img src={r.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                            <img src={r.avatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" style={focal(r.avatarFocalX, r.avatarFocalY)} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 mb-0.5">
                                 <span className="text-xs font-medium">{r.author}</span>
@@ -421,7 +424,7 @@ export default function CommunityDetailPage() {
                   <div key={c.id}>
                     <div className="flex gap-2.5">
                       {/* users 조인 객체의 avatar_url (mock 댓글의 author 문자열과 구분) */}
-                      <img src={(typeof c.author === 'object' && c.author !== null ? c.author.avatar_url : null) ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      <img src={(typeof c.author === 'object' && c.author !== null ? c.author.avatar_url : null) ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={focal(c.author?.avatar_focal_x, c.author?.avatar_focal_y)} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                           <span className="text-xs font-medium">{(typeof c.author === 'object' && c.author !== null ? c.author.nickname : null) ?? '패밀로그 회원'}</span>
@@ -443,7 +446,7 @@ export default function CommunityDetailPage() {
                       <div className="ml-10 mt-3 space-y-3 pl-3 border-l-2 border-brand-line">
                         {getReplies(c.id).map(r => (
                           <div key={r.id} className="flex gap-2.5">
-                            <img src={r.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                            <img src={r.author?.avatar_url ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" style={focal(r.author?.avatar_focal_x, r.author?.avatar_focal_y)} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 mb-0.5">
                                 <span className="text-xs font-medium">{r.author?.nickname ?? '패밀로그 회원'}</span>
@@ -476,7 +479,7 @@ export default function CommunityDetailPage() {
               </div>
             )}
             <div className="flex items-center gap-2">
-              <img src={user?.avatar ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
+              <img src={user?.avatar ?? 'https://i.pravatar.cc/60?img=30'} alt="" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" style={focal(user?.avatarFocalX, user?.avatarFocalY)} />
               <div className="flex-1 flex items-center bg-brand-card rounded-full pr-1">
                 <input
                   value={comment}
