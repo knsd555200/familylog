@@ -272,6 +272,7 @@ export async function getFamilyIdentity(
 ): Promise<{
   name: string
   seq: number | null
+  avatarUrl: string | null
   welcomeMessage: string | null
   description: string | null
   createdAt: string
@@ -279,7 +280,7 @@ export async function getFamilyIdentity(
 } | null> {
   const { data } = await supabase
     .from('families')
-    .select('name, seq, welcome_message, description, created_at')
+    .select('name, seq, avatar_url, welcome_message, description, created_at')
     .eq('id', familyId)
     .maybeSingle() // 결과 없을 때 406 방지
   if (!data) return null
@@ -302,6 +303,7 @@ export async function getFamilyIdentity(
   return {
     name:           data.name,
     seq:            data.seq ?? null,
+    avatarUrl:      (data as any).avatar_url ?? null,
     welcomeMessage: (data as any).welcome_message ?? null,
     description:    data.description ?? null,
     createdAt:      data.created_at,
@@ -315,15 +317,21 @@ export async function updateFamilyIdentity(
   name: string,
   welcomeMessage: string | null,
   description: string | null,
+  avatarUrl: string | null,
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('families')
     .update({
       name,
       welcome_message: welcomeMessage && welcomeMessage.trim() ? welcomeMessage : null,
       description: description && description.trim() ? description : null,
+      avatar_url: avatarUrl,
     })
     .eq('id', familyId)
+    .select('id')
+  if (!error && (!data || data.length === 0)) {
+    return { error: '가족 정보를 수정할 권한이 없거나 대상 가족을 찾지 못했어요.' }
+  }
   return { error: error ? error.message : null }
 }
 

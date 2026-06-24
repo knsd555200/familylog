@@ -165,17 +165,17 @@ function StoryFamilyCard({
   className?: string
 }) {
   return (
-    <div className={`bg-white border border-brand-green/20 rounded-xl overflow-hidden ${className}`}>
-      <div className="aspect-square bg-brand-green-light/60">
+    <div className={`relative aspect-[3/4] rounded-xl overflow-hidden border border-brand-green/15 bg-brand-green-light/60 shadow-sm ${className}`}>
+      <div className="absolute inset-0">
         {avatarUrl
           ? <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
           : <div className="w-full h-full bg-brand-green flex items-center justify-center">
-              <span className="text-2xl text-white">{name.charAt(0)}</span>
+              <span className="text-3xl text-white">{name.charAt(0)}</span>
             </div>
         }
       </div>
-      <div className="px-2 py-1.5 text-center">
-        <p className="text-xs font-medium text-brand-text truncate">{name}</p>
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-2 pt-8 pb-2">
+        <p className="text-xs font-medium text-white truncate">{name}</p>
       </div>
     </div>
   )
@@ -216,7 +216,7 @@ function StoryFamilyDirectoryModal({
         // 가족 전체 목록은 아직 이동 경로가 없어 카드도 비클릭으로만 보여준다.
         <div className="grid grid-cols-3 lg:grid-cols-5 gap-3 max-h-[58vh] overflow-y-auto pr-1">
           {families.map(family => (
-            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} />
+            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} className="w-full" />
           ))}
         </div>
       )}
@@ -486,8 +486,8 @@ function CommunityPageContent() {
   const [familyPosts, setFamilyPosts] = useState<CardPost[]>([])
   // 활성 가족 멤버 수 — 초대 배너 자가소멸 판정 (1명일 때만 배너)
   const [familyMemberCount, setFamilyMemberCount] = useState<number | null>(null)
-  // 가족 정체성(이름·일수·기수·소개) — 상단 영역용. null = 아직 미조회(로딩 스켈레톤)
-  const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null }[] } | null>(null)
+  // 가족 정체성(이름·일수·기수·소개·대표 사진) — 상단 영역용. null = 아직 미조회(로딩 스켈레톤)
+  const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; avatarUrl: string | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null }[] } | null>(null)
   // 이야기 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체 목록은 모달 최초 진입 때만 별도 조회한다.
   const [showAllFamiliesModal, setShowAllFamiliesModal] = useState(false)
   const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
@@ -1225,8 +1225,8 @@ function CommunityPageContent() {
         )}
 
         {feedTab === '이야기' && (
-          <div className="bg-brand-green-light border border-brand-green/25 rounded-2xl p-4">
-            <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] font-medium text-brand-green-dark">
                 최근 이야기한 가정
               </p>
@@ -1242,14 +1242,14 @@ function CommunityPageContent() {
             {storyRecentFamilies.length === 0 ? (
               <p className="text-sm text-brand-green/60">아직 공개 이야기를 남긴 가정이 없어요</p>
             ) : (
-              // 이야기 박스 가족 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다.
+              // 이야기 쇼츠 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다.
               <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                 {storyRecentFamilies.slice(0, 8).map(family => (
                   <StoryFamilyCard
                     key={family.id}
                     name={family.name}
                     avatarUrl={family.avatarUrl}
-                    className="w-20 flex-shrink-0"
+                    className="w-24 flex-shrink-0"
                   />
                 ))}
               </div>
@@ -1655,6 +1655,7 @@ function CommunityPageContent() {
           initialName={familyIdentity.name}
           initialWelcomeMessage={familyIdentity.welcomeMessage}
           initialDescription={familyIdentity.description}
+          initialAvatarUrl={familyIdentity.avatarUrl}
           onClose={handleEditIdentityClose}
           onSaved={handleEditIdentitySaved}
         />
