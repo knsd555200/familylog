@@ -1,9 +1,10 @@
 'use client'
 import { useState, useRef, useCallback } from 'react'
 import { Camera, X } from 'lucide-react'
+import FocalPointPicker from '@/components/FocalPointPicker'
+import { useAuth } from '@/context/AuthContext'
 import { updateFamilyIdentity } from '@/lib/api/family'
 import { uploadImages } from '@/lib/upload'
-import { focal } from '@/lib/avatarFocal'
 
 /**
  * 가족 정체성 편집 시트. 대표 사진·환영 문구·가족 공지·가정명을 다룬다.
@@ -30,11 +31,13 @@ export default function EditFamilyIdentitySheet({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { refreshUser } = useAuth()
   const [welcomeMessage, setWelcomeMessage] = useState(initialWelcomeMessage ?? '')
   const [description, setDescription] = useState(initialDescription ?? '')
   const [name, setName] = useState(initialName)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialAvatarUrl)
+  const [avatarFocal, setAvatarFocal] = useState({ x: initialAvatarFocalX ?? 50, y: initialAvatarFocalY ?? 50 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const processingRef = useRef(false)
@@ -44,6 +47,7 @@ export default function EditFamilyIdentitySheet({
     const file = e.target.files?.[0]
     if (!file) return
     setAvatarFile(file)
+    setAvatarFocal({ x: 50, y: 50 })
     const reader = new FileReader()
     reader.onload = ev => setAvatarPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
@@ -76,6 +80,8 @@ export default function EditFamilyIdentitySheet({
       welcomeMessage.trim(),
       description.trim(),
       finalAvatarUrl,
+      avatarFocal.x,
+      avatarFocal.y,
     )
     if (result.error) {
       setError(result.error)
@@ -86,8 +92,9 @@ export default function EditFamilyIdentitySheet({
 
     setLoading(false)
     processingRef.current = false
+    await refreshUser()
     onSaved()
-  }, [familyId, name, welcomeMessage, description, initialAvatarUrl, avatarFile, onSaved])
+  }, [familyId, name, welcomeMessage, description, initialAvatarUrl, avatarFile, avatarFocal, refreshUser, onSaved])
 
   return (
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
@@ -104,22 +111,31 @@ export default function EditFamilyIdentitySheet({
         {/* 가족 대표 사진 — 이야기 카드에서 쓰는 가족 단위 이미지 */}
         <label className="block text-xs font-medium text-brand-muted mb-1.5">가족 대표 사진</label>
         <div className="flex items-center gap-4 mb-5">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="relative w-20 aspect-[3/4] rounded-xl overflow-hidden bg-brand-green-light border border-brand-line flex-shrink-0"
-          >
+          <div className="relative w-20 flex-shrink-0">
             {avatarPreview ? (
-              <img src={avatarPreview} alt="" className="w-full h-full object-cover" style={focal(initialAvatarFocalX, initialAvatarFocalY)} />
+              <FocalPointPicker
+                imageUrl={avatarPreview}
+                value={avatarFocal}
+                onChange={(x, y) => setAvatarFocal({ x, y })}
+                aspectRatio="3:4"
+              />
             ) : (
-              <div className="w-full h-full bg-brand-green flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full aspect-[3/4] rounded-xl bg-brand-green flex items-center justify-center border border-brand-line"
+              >
                 <span className="text-2xl text-white">{name.trim().charAt(0) || '가'}</span>
-              </div>
+              </button>
             )}
-            <div className="absolute bottom-1.5 right-1.5 w-7 h-7 bg-brand-green rounded-full flex items-center justify-center border-2 border-white shadow">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-1.5 right-1.5 w-7 h-7 bg-brand-green rounded-full flex items-center justify-center border-2 border-white shadow"
+            >
               <Camera size={13} className="text-white" />
-            </div>
-          </button>
+            </button>
+          </div>
           <div className="min-w-0">
             <button
               type="button"

@@ -5,7 +5,7 @@ import { ArrowLeft, Camera, Check } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { uploadImages } from '@/lib/upload'
-import { focal } from '@/lib/avatarFocal'
+import FocalPointPicker from '@/components/FocalPointPicker'
 
 const LIFE_STAGES = [
   { id: 'pre_married', label: '예비부부', icon: '💍' },
@@ -17,27 +17,34 @@ const LIFE_STAGES = [
 async function patchUser(
   userId: string,
   token: string,
-  payload: { nickname: string; bio: string; life_stage: string | null; avatar_url: string; family_start_date: string | null }
-): Promise<boolean> {
+  payload: { nickname: string; bio: string; life_stage: string | null; avatar_url: string; avatar_focal_x: number; avatar_focal_y: number; family_start_date: string | null }
+): Promise<{ error: string | null }> {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${userId}`,
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=id`,
     {
       method: 'PATCH',
       headers: {
         apikey:           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         Authorization:    `Bearer ${token}`,
         'Content-Type':   'application/json',
-        Prefer:           'return=minimal',
+        Prefer:           'return=representation',
       },
       body: JSON.stringify(payload),
     }
   )
-  return res.ok
+  if (!res.ok) return { error: '프로필 저장에 실패했어요. 다시 시도해주세요.' }
+
+  const data = await res.json()
+  if (!Array.isArray(data) || data.length === 0) {
+    return { error: '프로필을 수정할 권한이 없거나 사용자를 찾을 수 없어요.' }
+  }
+
+  return { error: null }
 }
 
 export default function ProfileEditPage() {
   const router = useRouter()
-  const { user, updateUser } = useAuth()
+  const { user, refreshUser } = useAuth()
 
   const [nickname,         setNickname]         = useState(user?.nickname           ?? '')
   const [bio,              setBio]              = useState(user?.bio                ?? '')
@@ -46,6 +53,7 @@ export default function ProfileEditPage() {
   const [avatarUrl,        setAvatarUrl]        = useState(user?.avatar             ?? '')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [preview,    setPreview]    = useState<string | null>(null)
+  const [avatarFocal, setAvatarFocal] = useState({ x: user?.avatarFocalX ?? 50, y: user?.avatarFocalY ?? 50 })
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
 
@@ -55,6 +63,7 @@ export default function ProfileEditPage() {
     const file = e.target.files?.[0]
     if (!file) return
     setAvatarFile(file)
+    setAvatarFocal({ x: 50, y: 50 })
     const reader = new FileReader()
     reader.onload = ev => setPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
@@ -85,20 +94,15 @@ export default function ProfileEditPage() {
         bio:               bio.trim(),
         life_stage:        lifeStage,
         avatar_url:        finalAvatarUrl,
+        avatar_focal_x:    avatarFocal.x,
+        avatar_focal_y:    avatarFocal.y,
         family_start_date: familyStartDate || null,
       }
 
-      const ok = await patchUser(user.id, session.access_token, payload)
-      if (!ok) { setError('저장에 실패했어요. 다시 시도해주세요.'); return }
+      const result = await patchUser(user.id, session.access_token, payload)
+      if (result.error) { setError(result.error); return }
 
-      // AuthContext user 상태 즉시 갱신
-      updateUser({
-        nickname:          payload.nickname,
-        bio:               payload.bio,
-        life_stage:        payload.life_stage,
-        avatar:            finalAvatarUrl,
-        family_start_date: payload.family_start_date,
-      })
+      await refreshUser()
 
       router.back()
     } finally {
@@ -129,20 +133,29 @@ export default function ProfileEditPage() {
       <div className="px-4 lg:px-6 py-6 space-y-6">
         {/* 아바타 */}
         <div className="flex flex-col items-center">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="relative"
-          >
+          <div className="relative w-24">
             {displayAvatar ? (
-              <img src={displayAvatar} alt="" className="w-24 h-24 rounded-full object-cover border-2 border-brand-line" style={focal(user?.avatarFocalX, user?.avatarFocalY)} />
+              <FocalPointPicker
+                imageUrl={displayAvatar}
+                value={avatarFocal}
+                onChange={(x, y) => setAvatarFocal({ x, y })}
+                aspectRatio="circle"
+              />
             ) : (
-              <div className="w-24 h-24 rounded-full bg-brand-card flex items-center justify-center border-2 border-brand-line" />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-24 h-24 rounded-full bg-brand-card flex items-center justify-center border-2 border-brand-line"
+              />
             )}
-            <div className="absolute bottom-0 right-0 w-8 h-8 bg-brand-green rounded-full flex items-center justify-center border-2 border-white shadow">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 w-8 h-8 bg-brand-green rounded-full flex items-center justify-center border-2 border-white shadow"
+            >
               <Camera size={14} className="text-white" />
-            </div>
-          </button>
+            </button>
+          </div>
           <p className="text-xs text-brand-muted mt-2">사진 변경</p>
           <input
             ref={fileInputRef}

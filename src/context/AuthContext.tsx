@@ -37,6 +37,7 @@ interface AuthContextType {
   showOnboarding: boolean
   setShowOnboarding: (v: boolean) => void
   updateUser: (partial: Partial<User>) => void
+  refreshUser: () => Promise<User | null>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -49,6 +50,7 @@ const AuthContext = createContext<AuthContextType>({
   showOnboarding: false,
   setShowOnboarding: () => {},
   updateUser: () => {},
+  refreshUser: async () => null,
 })
 
 async function buildUser(authUser: { id: string; email?: string; user_metadata?: Record<string, string> }, accessToken: string): Promise<User> {
@@ -210,8 +212,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(prev => prev ? { ...prev, ...partial } : prev)
   }
 
+  const refreshUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      currentUidRef.current = null
+      setUser(null)
+      setStatus('unauthenticated')
+      return null
+    }
+
+    const built = await buildUser(session.user, session.access_token)
+    currentUidRef.current = session.user.id
+    setUser(built)
+    setStatus('authenticated')
+    return built
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loginWithKakao, logout, isLoggedIn: !!user, isLoading, status, showOnboarding, setShowOnboarding, updateUser }}>
+    <AuthContext.Provider value={{ user, loginWithKakao, logout, isLoggedIn: !!user, isLoading, status, showOnboarding, setShowOnboarding, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

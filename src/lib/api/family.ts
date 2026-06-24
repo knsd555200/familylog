@@ -342,6 +342,8 @@ export async function updateFamilyIdentity(
   welcomeMessage: string | null,
   description: string | null,
   avatarUrl: string | null,
+  avatarFocalX?: number | null,
+  avatarFocalY?: number | null,
 ): Promise<{ error: string | null }> {
   const { data, error } = await supabase
     .from('families')
@@ -350,6 +352,8 @@ export async function updateFamilyIdentity(
       welcome_message: welcomeMessage && welcomeMessage.trim() ? welcomeMessage : null,
       description: description && description.trim() ? description : null,
       avatar_url: avatarUrl,
+      avatar_focal_x: avatarFocalX ?? 50,
+      avatar_focal_y: avatarFocalY ?? 50,
     })
     .eq('id', familyId)
     .select('id')
