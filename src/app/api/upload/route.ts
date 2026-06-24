@@ -63,18 +63,6 @@ export async function POST(request: NextRequest) {
 
   const arrayBuffer = await file.arrayBuffer()
 
-  // [임시 디버그] R2 자격증명·요청 메타 점검용 — Invalid header 원인 추적 후 제거 예정
-  console.log('[upload debug]', JSON.stringify({
-    userId: user.id,
-    key,
-    fileType: file.type,
-    fileName: file.name,
-    accountId: process.env.R2_ACCOUNT_ID,
-    bucket: process.env.R2_BUCKET_NAME,
-    accessKeyLen: process.env.R2_ACCESS_KEY_ID?.length,
-    secretKeyLen: process.env.R2_SECRET_ACCESS_KEY?.length,
-  }))
-
   await r2.send(new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME!,
     Key: key,

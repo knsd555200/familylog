@@ -476,6 +476,8 @@ function CommunityPageContent() {
     else params.delete('tab')
     const qs = params.toString()
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+    // 실제로 다른 탭으로 전환할 때만 문서 스크롤을 상단으로 되돌린다.
+    if (t !== feedTab) window.scrollTo({ top: 0 })
   }
   const [sortMode, setSortMode] = useState<SortMode>('latest') // 기본 최신순, 인기순은 옵션
   // 우리 가족 탭 보기 방식 — 대형 카드 / 사진 그리드
