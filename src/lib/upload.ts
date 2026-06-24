@@ -1,14 +1,8 @@
 import { supabase } from '@/lib/supabase'
 
 async function getAccessToken(): Promise<string | null> {
-  // 1) 저장된 세션에서 액세스 토큰을 먼저 읽는다(정상 경로).
   const { data: { session } } = await supabase.auth.getSession()
-  if (session?.access_token) return session.access_token
-
-  // 2) 세션이 비어 있으면(토큰 만료·세션 복원 지연 등) 토큰 갱신을 한 번 시도한다.
-  //    로그인 상태인데도 getSession()이 일시적으로 null을 주는 경우를 구제한다.
-  const { data: { session: refreshed } } = await supabase.auth.refreshSession()
-  return refreshed?.access_token ?? null
+  return session?.access_token ?? null
 }
 
 export async function uploadImages(files: File[]): Promise<{ urls: string[]; error?: string }> {
