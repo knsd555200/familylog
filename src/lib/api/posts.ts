@@ -361,7 +361,7 @@ export async function createPost(params: {
       userId:        user.id,
       meritType:     'event_joined',
       points:        params.verify_merit_reward,
-      category:      'events',
+      category:      'event',
       referenceType: 'post',
       referenceId:   data.id,
       note:          '행사 참여 인증',
