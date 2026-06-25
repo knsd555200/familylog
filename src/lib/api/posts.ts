@@ -449,18 +449,42 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
   // 작성자 본인 삭제 + 작성 24시간 이내일 때만 포인트 회수
   const ageMs = Date.now() - new Date(post.created_at).getTime()
   if (isAuthor && ageMs < 24 * 60 * 60 * 1000) {
-    const POST_VISIBILITY_POINTS: Record<string, number> = { public: 10, family: 0, private: 0 }
-    const revokePoints = POST_VISIBILITY_POINTS[post.visibility] ?? 10
-    if (revokePoints > 0) {
-      await addMerit({
-        userId: post.author_id,
-        meritType: 'post_deleted',
-        points: -revokePoints,
-        category: 'activity',
-        referenceType: 'post',
-        referenceId: postId,
-        note: '게시글 삭제',
-      })
+    const { data: grantedMerit, error: grantLookupError } = await supabase
+      .from('merits')
+      .select('id, points')
+      .eq('user_id', post.author_id)
+      .eq('reference_type', 'post')
+      .eq('reference_id', postId)
+      .eq('merit_type', 'post_created')
+      .limit(1)
+      .maybeSingle()
+
+    if (grantLookupError) {
+      console.error('[deletePost] post_created merit lookup failed:', grantLookupError.message)
+    } else if (grantedMerit && grantedMerit.points > 0) {
+      const { data: revokedMerit, error: revokeLookupError } = await supabase
+        .from('merits')
+        .select('id')
+        .eq('user_id', post.author_id)
+        .eq('reference_type', 'post')
+        .eq('reference_id', postId)
+        .eq('merit_type', 'post_deleted')
+        .limit(1)
+        .maybeSingle()
+
+      if (revokeLookupError) {
+        console.error('[deletePost] post_deleted merit lookup failed:', revokeLookupError.message)
+      } else if (!revokedMerit) {
+        await addMerit({
+          userId: post.author_id,
+          meritType: 'post_deleted',
+          points: -grantedMerit.points,
+          category: 'activity',
+          referenceType: 'post',
+          referenceId: postId,
+          note: '게시글 삭제',
+        })
+      }
     }
   }
 
