@@ -56,9 +56,19 @@ export async function addMerit({
     }
 
     // merits 테이블에 적립 내역 INSERT
+    const { data: userSnapshot, error: userSnapshotError } = await supabase
+      .from('users')
+      .select('family_id')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (userSnapshotError) {
+      console.error('[addMerit] family_id 조회 실패:', userSnapshotError.message)
+    }
+
     const { error: insertError } = await supabase.from('merits').insert({
       user_id:        userId,
-      family_id:      null,
+      family_id:      userSnapshot?.family_id ?? null,
       merit_type:     meritType,
       category:       category,
       points:         points,
