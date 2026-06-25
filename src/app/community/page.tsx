@@ -731,6 +731,7 @@ function CommunityPageContent() {
   const removePost = (postId: string) => {
     setPopularPosts(prev => prev.filter(p => p.id !== postId))
     setLatestPosts(prev => prev.filter(p => p.id !== postId))
+    setFamilyPosts(prev => prev.filter(p => p.id !== postId))
   }
 
   // 가족 피드 인라인 댓글 등록 — 상세 안 가도 바로 작성

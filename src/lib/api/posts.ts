@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { addMerit } from '@/lib/api/merits'
+import { deleteImages } from '@/lib/upload'
 import { FeedPost } from '@/types/post'
 import { CommunityPost } from '@/types/post'
 import { STORY_FEED_GATING_ENABLED } from '@/lib/constants'
@@ -370,7 +371,13 @@ export async function createPost(params: {
   return { success: true, id: data.id }
 }
 
-// 게시글 소프트 삭제 (작성자 또는 admin만)
+// 게시글 hard delete (작성자 또는 admin만)
+// 메릿 정책 (v46 확정):
+// - 글 작성 메릿: 24시간 내 본인 삭제 시에만 회수 (post_deleted, 기존 로직 유지)
+// - 받은 좋아요로 적립된 메릿(like_received): 보존 — 이미 발생한 사회적 활동
+// - 댓글로 적립된 메릿(comment_created): 보존 — 댓글 작성자의 활동 인정
+// - merits 테이블 행 자체: reference_id가 사라진 글을 가리키더라도 보존
+//   (활동 이력 장부 성격. UI는 글 fetch 실패 시 안전 처리됨)
 export async function deletePost(postId: string): Promise<{ success: boolean; error?: string }> {
   if (!isUUID(postId)) return { success: false, error: '삭제할 수 없는 글입니다' }
 
@@ -380,7 +387,7 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
 
   const { data: post, error: fetchError } = await supabase
     .from('posts')
-    .select('author_id, created_at, visibility')
+    .select('author_id, created_at, visibility, media_urls')
     .eq('id', postId)
     .is('deleted_at', null)
     .maybeSingle()
@@ -397,9 +404,44 @@ export async function deletePost(postId: string): Promise<{ success: boolean; er
   const isAdmin = profile?.role === 'admin'
   if (!isAuthor && !isAdmin) return { success: false, error: '삭제 권한이 없어요' }
 
+  const { data: commentRows } = await supabase
+    .from('comments')
+    .select('id')
+    .eq('post_id', postId)
+  const commentIds = (commentRows ?? []).map(c => c.id)
+
+  if (commentIds.length > 0) {
+    await supabase
+      .from('likes')
+      .delete()
+      .eq('target_type', 'comment')
+      .in('target_id', commentIds)
+  }
+
+  await supabase
+    .from('likes')
+    .delete()
+    .eq('target_type', 'post')
+    .eq('target_id', postId)
+
+  await supabase
+    .from('notifications')
+    .delete()
+    .eq('related_type', 'post')
+    .eq('related_id', postId)
+
+  const mediaUrls = Array.isArray(post.media_urls) ? post.media_urls : []
+  if (mediaUrls.length > 0) {
+    try {
+      await deleteImages(mediaUrls)
+    } catch (e) {
+      console.error('R2 image cleanup failed for post', postId, e)
+    }
+  }
+
   const { error } = await supabase
     .from('posts')
-    .update({ deleted_at: new Date().toISOString() })
+    .delete()
     .eq('id', postId)
 
   if (error) return { success: false, error: error.message }
