@@ -8,14 +8,19 @@ type Props = {
   imageUrl: string
   value: FocalValue
   onChange: (x: number, y: number) => void
-  aspectRatio?: 'circle' | '3:4'
+  aspectRatio?: 'circle' | '3:4' | '16:9'
 }
 
 export default function FocalPointPicker({ imageUrl, value, onChange, aspectRatio = 'circle' }: Props) {
   const draggingRef = useRef(false)
   const x = value.x ?? 50
   const y = value.y ?? 50
-  const shapeClass = aspectRatio === 'circle' ? 'aspect-square rounded-full' : 'aspect-[3/4] rounded-xl'
+  const shapeClass =
+    aspectRatio === 'circle'
+      ? 'aspect-square rounded-full'
+      : aspectRatio === '16:9'
+        ? 'aspect-[16/9] rounded-xl'
+        : 'aspect-[3/4] rounded-xl'
 
   const move = (e: PointerEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()

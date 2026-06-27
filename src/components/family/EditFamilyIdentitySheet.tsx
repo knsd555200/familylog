@@ -108,7 +108,7 @@ export default function EditFamilyIdentitySheet({
         <h2 className="font-serif text-lg font-semibold text-brand-text mb-1">가족 정보 수정</h2>
         <p className="text-sm text-brand-sub mb-5">환영 문구와 공지, 가정명을 다듬어 보세요</p>
 
-        {/* 가족 대표 사진 — 이야기 카드에서 쓰는 가족 단위 이미지 */}
+        {/* 가족 대표 사진 — 우리가족 배너에 맞춰 16:9로 잡고, 이웃 3:4 카드는 같은 좌표로 근사한다. */}
         <label className="block text-xs font-medium text-brand-muted mb-1.5">가족 대표 사진</label>
         <div className="flex items-center gap-4 mb-5">
           <div className="relative w-20 flex-shrink-0">
@@ -117,13 +117,13 @@ export default function EditFamilyIdentitySheet({
                 imageUrl={avatarPreview}
                 value={avatarFocal}
                 onChange={(x, y) => setAvatarFocal({ x, y })}
-                aspectRatio="3:4"
+                aspectRatio="16:9"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full aspect-[3/4] rounded-xl bg-brand-green flex items-center justify-center border border-brand-line"
+                className="w-full aspect-[16/9] rounded-xl bg-brand-green flex items-center justify-center border border-brand-line"
               >
                 <span className="text-2xl text-white">{name.trim().charAt(0) || '가'}</span>
               </button>
