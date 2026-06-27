@@ -78,7 +78,7 @@ function ImageStrip({ images, onOpen }: { images: string[]; onOpen: (e: React.Mo
   )
 }
 
-const FEED_TABS = ['이야기', '우리 가족'] as const
+const FEED_TABS = ['이웃', '우리 가족'] as const
 type FeedTab = typeof FEED_TABS[number]
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -108,7 +108,7 @@ function formatEventDate(iso: string | null): string {
   })
 }
 
-// 이야기 탭 카드만 상대시간 대신 날짜로 보여줘 첫인상에서 신생 서비스 느낌을 줄인다.
+// 이웃 탭 카드만 상대시간 대신 날짜로 보여줘 첫인상에서 신생 서비스 느낌을 줄인다.
 function formatStoryCardDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ko-KR', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -489,8 +489,8 @@ function CommunityPageContent() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   // 탭 상태를 URL(?tab=family)과 동기화 — 새로고침해도 우리 가족 탭 유지
-  // 초기값은 항상 '이야기'(서버 렌더와 일치) → 마운트 후 effect에서 URL 복원 (hydration mismatch 방지)
-  const [feedTab, setFeedTab] = useState<FeedTab>('이야기')
+  // 초기값은 항상 '이웃'(서버 렌더와 일치) → 마운트 후 effect에서 URL 복원 (hydration mismatch 방지)
+  const [feedTab, setFeedTab] = useState<FeedTab>('이웃')
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -500,7 +500,7 @@ function CommunityPageContent() {
   }, [])
 
   useEffect(() => {
-    const nextTab: FeedTab = searchParams.get('tab') === 'family' ? '우리 가족' : '이야기'
+    const nextTab: FeedTab = searchParams.get('tab') === 'family' ? '우리 가족' : '이웃'
     setFeedTab(current => current === nextTab ? current : nextTab)
   }, [searchParams])
 
@@ -525,7 +525,7 @@ function CommunityPageContent() {
   const [familyMemberCount, setFamilyMemberCount] = useState<number | null>(null)
   // 가족 정체성(이름·일수·기수·소개·대표 사진) — 상단 영역용. null = 아직 미조회(로딩 스켈레톤)
   const [familyIdentity, setFamilyIdentity] = useState<{ name: string; seq: number | null; avatarUrl: string | null; avatarFocalX?: number | null; avatarFocalY?: number | null; welcomeMessage: string | null; description: string | null; createdAt: string; members: { userId: string; nickname: string; avatar: string | null; avatarFocalX?: number | null; avatarFocalY?: number | null }[] } | null>(null)
-  // 이야기 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체 목록은 모달 최초 진입 때만 별도 조회한다.
+  // 이웃 탭 가족 아바타 박스 — 요약은 피드 데이터, 전체 목록은 모달 최초 진입 때만 별도 조회한다.
   const [showAllFamiliesModal, setShowAllFamiliesModal] = useState(false)
   const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
   const [allFamiliesLoading, setAllFamiliesLoading] = useState(false)
@@ -657,7 +657,7 @@ function CommunityPageContent() {
           .filter(p => !isDbPostId(p.id))
           .map((p, i) => communityToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
           .sort(byNewest)
-        // 이야기 피드는 DB 실패 시 목 글로 덮지 않고 빈 상태를 그대로 보여준다.
+        // 이웃 피드는 DB 실패 시 목 글로 덮지 않고 빈 상태를 그대로 보여준다.
         setPopularPosts([])
         setLatestPosts(latest)
       })
@@ -833,7 +833,7 @@ function CommunityPageContent() {
   }, [changeTab, isLoading, router, user?.family_id])
 
   const handleWriteEntryClick = useCallback(() => {
-    if (feedTab === '이야기') {
+    if (feedTab === '이웃') {
       handleNeighborCompose()
       return
     }
@@ -847,7 +847,7 @@ function CommunityPageContent() {
   const storyRecentFamilies = useMemo<StoryFamilyAvatar[]>(() => {
     const byFamily = new Map<string, StoryFamilyAvatar>()
 
-    // 이야기 요약은 이미 불러온 public 피드에서 가족별 최신 글만 남긴다.
+    // 이웃 요약은 이미 불러온 public 피드에서 가족별 최신 글만 남긴다.
     for (const post of popularPosts) {
       if (!post.familyId || !post.familyName || !post.createdAt) continue
       const current = byFamily.get(post.familyId)
@@ -1267,8 +1267,8 @@ function CommunityPageContent() {
               </div>
         )}
 
-        {/* 이야기 탭 입구 — 공개 기록이 모이는 광장의 정체성을 먼저 보여준다. */}
-        {feedTab === '이야기' && (
+        {/* 이웃 탭 입구 — 공개 기록이 모이는 광장의 정체성을 먼저 보여준다. */}
+        {feedTab === '이웃' && (
           <div className="px-4 pt-2 pb-5">
             <p className="font-serif text-2xl font-bold text-brand-text leading-snug">
               이웃 이야기
@@ -1276,7 +1276,7 @@ function CommunityPageContent() {
           </div>
         )}
 
-        {feedTab === '이야기' && (
+        {feedTab === '이웃' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] font-medium text-brand-green-dark">
@@ -1292,7 +1292,7 @@ function CommunityPageContent() {
             </div>
 
             <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {/* 이야기 쇼츠 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다. */}
+              {/* 이웃 쇼츠 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다. */}
               {visibleStoryRecentFamilies.map(family => (
                 <StoryFamilyCard
                   key={family.id}
@@ -1315,7 +1315,7 @@ function CommunityPageContent() {
           </div>
         )}
 
-        {/* 라벨 + 토글 — 이야기 탭: 정렬 토글, 우리 가족 탭: 대형/사진 보기 토글 */}
+        {/* 라벨 + 토글 — 이웃 탭: 정렬 토글, 우리 가족 탭: 대형/사진 보기 토글 */}
         {feedTab !== '우리 가족' ? (
           <div className="flex items-center justify-between">
             <span className="font-serif text-sm font-semibold text-brand-text">
@@ -1446,10 +1446,10 @@ function CommunityPageContent() {
                       >
                         <img src={post.authorAvatar} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" style={focal(post.authorAvatarFocalX, post.authorAvatarFocalY)} />
                         <div className="flex-1 min-w-0">
-                          {feedTab === '이야기' ? (
+                          {feedTab === '이웃' ? (
                             post.familyName ? (
                               <>
-                                {/* 이야기 탭 — 가족명 1차, 닉네임·날짜 부제 */}
+                                {/* 이웃 탭 — 가족명 1차, 닉네임·날짜 부제 */}
                                 <div className="font-serif text-sm font-medium text-brand-green truncate">
                                   {post.familyName}
                                 </div>
@@ -1460,7 +1460,7 @@ function CommunityPageContent() {
                               </>
                             ) : (
                               <>
-                                {/* 이야기 탭 — 개인 회원: 닉네임 1차, 날짜만 부제 */}
+                                {/* 이웃 탭 — 개인 회원: 닉네임 1차, 날짜만 부제 */}
                                 <div className="text-sm font-medium truncate">{post.authorName}</div>
                                 {post.createdAt && (
                                   <div className="text-xs text-brand-muted truncate">
@@ -1729,7 +1729,7 @@ function CommunityPageContent() {
         <AuthSheet initialTab="signup" onClose={handleAuthClose} onSuccess={handleAuthSuccess} />
       )}
 
-      {/* 이야기 탭 전체 가족 모달 — 시트 셸만 재사용하고 가족 그리드 내용으로 채운다. */}
+      {/* 이웃 탭 전체 가족 모달 — 시트 셸만 재사용하고 가족 그리드 내용으로 채운다. */}
       {showAllFamiliesModal && (
         <StoryFamilyDirectoryModal
           families={allFamilies ?? []}
