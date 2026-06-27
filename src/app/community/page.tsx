@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback, Fra
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { communityPosts } from '@/data/community'
-import { feedPosts } from '@/data/feed'
 import { modelHousePosts, miloneIntro } from '@/data/modelHouse'
 import type { Comment, CommunityPost, FeedPost } from '@/types/post'
 import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar, Pencil, List, LayoutGrid, Plus } from 'lucide-react'
@@ -636,10 +635,7 @@ function CommunityPageContent() {
     Promise.all([getDbFeedPosts(), getDbCommunityPosts()])
       .then(([dbFeedPosts, dbCommunityPosts]) => {
         const dbFeedCards = dbFeedPosts.map(feedToCard)
-        const mockFeedCards = feedPosts
-          .filter(p => !isDbPostId(p.id))
-          .map((p, i) => feedToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
-        const popular = [...dbFeedCards, ...mockFeedCards].sort(byNewest)
+        const popular = dbFeedCards.sort(byNewest)
         setPopularPosts(popular)
 
         const dbCommunityCards = dbCommunityPosts.map(communityToCard)
@@ -656,15 +652,12 @@ function CommunityPageContent() {
         getCommentPreviews(dbIds, 'best', 1).then(setFeedPreviews)
       })
       .catch(() => {
-        const popular = feedPosts
-          .filter(p => !isDbPostId(p.id))
-          .map((p, i) => feedToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
-          .sort(byNewest)
         const latest = communityPosts
           .filter(p => !isDbPostId(p.id))
           .map((p, i) => communityToCard({ ...p, createdAt: p.createdAt ?? mockCreatedAt(i) }))
           .sort(byNewest)
-        setPopularPosts(popular)
+        // 이야기 피드는 DB 실패 시 목 글로 덮지 않고 빈 상태를 그대로 보여준다.
+        setPopularPosts([])
         setLatestPosts(latest)
       })
       .finally(() => setPostsLoading(false))
