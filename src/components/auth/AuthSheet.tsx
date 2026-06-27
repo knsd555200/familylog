@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { X } from 'lucide-react'
 import AuthForm, { AuthTab } from '@/components/auth/AuthForm'
 
@@ -23,6 +24,9 @@ export default function AuthSheet({
         <button onClick={onClose} className="absolute top-4 right-4 p-1 text-brand-muted">
           <X size={20} />
         </button>
+        <div className="mb-6 flex justify-center">
+          <Image src="/logo-slogan.png" alt="패밀로그" width={144} height={48} className="h-auto w-36 object-contain" />
+        </div>
         <AuthForm initialTab={initialTab} onSuccess={onSuccess} />
       </div>
     </div>
