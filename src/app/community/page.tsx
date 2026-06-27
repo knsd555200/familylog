@@ -195,10 +195,12 @@ function StoryFamilyCard({
 function StoryFamilyDirectoryModal({
   families,
   loading,
+  activeFamilyIds,
   onClose,
 }: {
   families: FamilyAvatarSummary[]
   loading: boolean
+  activeFamilyIds: Set<string>
   onClose: () => void
 }) {
   const [show, setShow] = useState(false)
@@ -213,22 +215,38 @@ function StoryFamilyDirectoryModal({
     setShow(false)
     setTimeout(onClose, 300)
   }, [onClose])
+  const activeFamilies = families.filter(family => activeFamilyIds.has(family.id))
+  const quietFamilies = families.filter(family => !activeFamilyIds.has(family.id))
+
+  const renderFamilySection = (title: string, sectionFamilies: FamilyAvatarSummary[]) => {
+    if (sectionFamilies.length === 0) return null
+
+    return (
+      <section className="space-y-2">
+        <h4 className="text-[11px] font-semibold text-brand-green-dark">{title}</h4>
+        <div className="grid grid-cols-3 lg:grid-cols-5 gap-3">
+          {sectionFamilies.map(family => (
+            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} avatarFocalX={family.avatar_focal_x} avatarFocalY={family.avatar_focal_y} className="w-full" />
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   const renderContent = () => (
     <>
-      <h3 className="font-serif text-lg font-semibold text-brand-text mb-1 text-center">패밀로그에 모인 가정들</h3>
-      <p className="text-xs text-brand-muted text-center mb-5">서로의 하루를 함께 기록하는 가정들이에요</p>
+      <h3 className="font-serif text-lg font-semibold text-brand-text mb-1 text-center">패밀로그 1기 가정들</h3>
+      <p className="text-xs text-brand-muted text-center mb-5">가장 먼저 문을 연 가정들이에요.</p>
 
       {loading ? (
         <p className="py-10 text-center text-sm text-brand-muted">가정을 불러오고 있어요</p>
       ) : families.length === 0 ? (
         <p className="py-10 text-center text-sm text-brand-muted">아직 함께하는 가정이 없어요</p>
       ) : (
-        // 가족 전체 목록은 아직 이동 경로가 없어 카드도 비클릭으로만 보여준다.
-        <div className="grid grid-cols-3 lg:grid-cols-5 gap-3 max-h-[58vh] overflow-y-auto pr-1">
-          {families.map(family => (
-            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} avatarFocalX={family.avatar_focal_x} avatarFocalY={family.avatar_focal_y} className="w-full" />
-          ))}
+        // 가족 전체 목록은 활동 집합만 부모에서 받아 seq순 두 섹션으로 나눈다.
+        <div className="max-h-[58vh] overflow-y-auto pr-1 space-y-6">
+          {renderFamilySection('이웃에 이야기를 나눈 가정', activeFamilies)}
+          {renderFamilySection('아직 이웃은 둘러보는 중인 가정', quietFamilies)}
         </div>
       )}
     </>
@@ -850,6 +868,7 @@ function CommunityPageContent() {
     )
   }, [popularPosts])
   const visibleStoryRecentFamilies = storyRecentFamilies.slice(0, 8)
+  const activeStoryFamilyIds = useMemo(() => new Set(storyRecentFamilies.map(family => family.id)), [storyRecentFamilies])
   const showStoryInviteCard = visibleStoryRecentFamilies.length === 0 || !storyFamiliesOverflowing
 
   // 한 줄 넘침 여부는 실제 가로 스크롤 컨테이너의 폭으로 판단한다.
@@ -1745,6 +1764,7 @@ function CommunityPageContent() {
         <StoryFamilyDirectoryModal
           families={allFamilies ?? []}
           loading={allFamiliesLoading}
+          activeFamilyIds={activeStoryFamilyIds}
           onClose={handleAllFamiliesClose}
         />
       )}
