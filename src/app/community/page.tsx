@@ -6,7 +6,7 @@ import { communityPosts } from '@/data/community'
 import { feedPosts } from '@/data/feed'
 import { modelHousePosts, miloneIntro } from '@/data/modelHouse'
 import type { Comment, CommunityPost, FeedPost } from '@/types/post'
-import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar, Pencil, List, LayoutGrid } from 'lucide-react'
+import { Heart, MessageSquare, PenSquare, X, ChevronLeft, ChevronRight, Calendar, Pencil, List, LayoutGrid, Plus } from 'lucide-react'
 import { getDbCommunityPosts, getDbFeedPosts, getFamilyFeedPosts, getMyLikes, toggleLike, formatTime, getCommentPreviews, createComment, type CommentPreview } from '@/lib/api/posts'
 import { getFamilyMemberCount, getFamilyIdentity, getAllFamilies, type FamilyAvatarSummary } from '@/lib/api/family'
 import { getTimeBasedGreeting } from '@/lib/greeting'
@@ -511,6 +511,9 @@ function CommunityPageContent() {
   const [showAllFamiliesModal, setShowAllFamiliesModal] = useState(false)
   const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
   const [allFamiliesLoading, setAllFamiliesLoading] = useState(false)
+  const storyFamiliesScrollRef = useRef<HTMLDivElement>(null)
+  const storyFamiliesListRef = useRef<HTMLDivElement>(null)
+  const [storyFamiliesOverflowing, setStoryFamiliesOverflowing] = useState(false)
   // 모델하우스 "가족 만들기" — 그 자리 생성 시트
   const [showCreateSheet, setShowCreateSheet] = useState(false)
   // 가족 정체성(가정명·소개) 편집 시트
@@ -808,11 +811,18 @@ function CommunityPageContent() {
   const showFeedSkeleton = isLoading || postsLoading
 
   // 모델하우스 CTA — 비회원은 로그인, 회원은 그 자리에서 가족 생성 시트
-  const handleModelhouseCta = () => {
+  const handleModelhouseCta = useCallback(() => {
     // 비회원: 인증 시트(가입탭) → 성공 시 가정 생성으로 이어지도록 의도 표시
     if (!user) { authIntentRef.current = 'createFamily'; setShowAuth(true); return }
     setShowCreateSheet(true)
-  }
+  }, [user])
+
+  const handleStoryInviteClick = useCallback(() => {
+    if (isLoading) { showToast('잠시만 기다려 주세요'); return }
+    if (user?.family_id) { window.location.href = 'community/write'; return }
+    showToast('가족 공간을 만들면 여기 함께 등장해요')
+    handleModelhouseCta()
+  }, [handleModelhouseCta, isLoading, showToast, user?.family_id])
 
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
@@ -839,6 +849,28 @@ function CommunityPageContent() {
       (a, b) => new Date(b.latestCreatedAt ?? 0).getTime() - new Date(a.latestCreatedAt ?? 0).getTime(),
     )
   }, [popularPosts])
+  const visibleStoryRecentFamilies = storyRecentFamilies.slice(0, 8)
+  const showStoryInviteCard = visibleStoryRecentFamilies.length === 0 || !storyFamiliesOverflowing
+
+  // 한 줄 넘침 여부는 실제 가로 스크롤 컨테이너의 폭으로 판단한다.
+  useEffect(() => {
+    const el = storyFamiliesScrollRef.current
+    const list = storyFamiliesListRef.current
+    if (!el || !list) {
+      setStoryFamiliesOverflowing(false)
+      return
+    }
+
+    const measure = () => {
+      setStoryFamiliesOverflowing(list.scrollWidth > el.clientWidth + 1)
+    }
+
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    ro.observe(list)
+    return () => ro.disconnect()
+  }, [visibleStoryRecentFamilies.length])
   const loadAllFamiliesOnce = useCallback(async () => {
     if (allFamilies !== null || allFamiliesLoading) return
     setAllFamiliesLoading(true)
@@ -1261,12 +1293,10 @@ function CommunityPageContent() {
               </button>
             </div>
 
-            {storyRecentFamilies.length === 0 ? (
-              <p className="text-sm text-brand-green/60">아직 공개 이야기를 남긴 가정이 없어요</p>
-            ) : (
-              // 이야기 쇼츠 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다.
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-                {storyRecentFamilies.slice(0, 8).map(family => (
+            <div ref={storyFamiliesScrollRef} className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {/* 이야기 쇼츠 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다. */}
+              <div ref={storyFamiliesListRef} className="flex flex-shrink-0 gap-2">
+                {visibleStoryRecentFamilies.map(family => (
                   <StoryFamilyCard
                     key={family.id}
                     name={family.name}
@@ -1277,7 +1307,24 @@ function CommunityPageContent() {
                   />
                 ))}
               </div>
-            )}
+              {showStoryInviteCard && (
+                <button
+                  type="button"
+                  onClick={handleStoryInviteClick}
+                  className="w-24 aspect-[3/4] flex-shrink-0 rounded-xl border border-dashed border-brand-green/45 bg-brand-green-light/70 px-2 text-center text-brand-green-dark shadow-sm transition-colors hover:bg-brand-green-light"
+                >
+                  <span className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-brand-green/10 text-brand-green">
+                    <Plus size={18} />
+                  </span>
+                  <span className="block text-[11px] font-medium leading-snug">
+                    {isLoading || !user?.family_id ? '가족 공간을 만들면 여기 함께 등장해요' : '우리 가족 이야기도 들려주세요'}
+                  </span>
+                  <span className="mt-2 block text-[10px] font-semibold leading-tight text-brand-green">
+                    {isLoading || !user?.family_id ? '우리 가족 공간 만들기' : '전체공개 이야기 쓰기'}
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
