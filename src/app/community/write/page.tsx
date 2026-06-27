@@ -16,6 +16,7 @@ const VISIBILITY_META = {
   private: { Icon: EyeOff, label: '나만 보기', desc: '지금은 나만 봐요. 먼 훗날 가족에게 전할 수 있어요' },
 } as const
 type Visibility = keyof typeof VISIBILITY_META
+type NoFamilyModalTrigger = 'family' | 'public'
 
 // 공통 텍스트 input / number input 스타일
 const INPUT_CLS =
@@ -26,6 +27,7 @@ function CommunityWriteForm() {
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { user, status } = useAuth()
+  const [composeIntent] = useState(() => searchParams.get('compose'))
 
   // 행사 인증 컨텍스트
   const eventId          = searchParams.get('event_id')
@@ -58,24 +60,32 @@ function CommunityWriteForm() {
   const [visibility, setVisibility] = useState<Visibility>('private')
   const visibilityInitializedRef = useRef(false)
   const visibilityTouchedRef = useRef(false)
+  const noFamilyModalSubmittingRef = useRef(false)
   const [showVisibilitySheet, setShowVisibilitySheet] = useState(false)
   const [imageFiles,    setImageFiles]    = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [showNoFamilyModal, setShowNoFamilyModal] = useState(false)
+  const [noFamilyModalTrigger, setNoFamilyModalTrigger] = useState<NoFamilyModalTrigger>('family')
   const [modalError, setModalError] = useState('')
   // 나만 보기로 저장 후 가족 만들기 시트 — 저장된 글 id 보관해 생성 후 그 글로 이동
   const [showCreateSheet, setShowCreateSheet] = useState(false)
   const [savedPostId, setSavedPostId] = useState<string | null>(null)
 
+  // 비회원 외부 진입은 로그인으로 보낸다.
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/login')
+  }, [router, status])
+
   // 인증 사용자 확정 후 가정 유무로 기본 공개 범위를 한 번만 정한다.
   useEffect(() => {
     if (status !== 'authenticated' || !user) return
     if (visibilityInitializedRef.current || visibilityTouchedRef.current) return
-    setVisibility(user.family_id ? 'family' : 'private')
+    // compose=public은 가족 공간이 있는 사용자에게만 public 의도로 반영한다.
+    setVisibility(user.family_id ? (composeIntent === 'public' ? 'public' : 'family') : 'private')
     visibilityInitializedRef.current = true
-  }, [status, user])
+  }, [composeIntent, status, user])
 
   const setUserVisibility = (next: Visibility) => {
     visibilityTouchedRef.current = true
@@ -132,11 +142,25 @@ function CommunityWriteForm() {
 
   // ── 가족만 보기 선택 시 — 가족 없으면 모달 표시 ─────────────────────────────
   const handleFamilyVisibilityClick = () => {
-    if (!user?.family_id) {
+    if (status !== 'authenticated' || !user) return
+    if (!user.family_id) {
+      setNoFamilyModalTrigger('family')
       setModalError('')
       setShowNoFamilyModal(true)
     } else {
       setUserVisibility('family')
+    }
+  }
+
+  // ── 전체 공개 선택 시 — 가족 없으면 광장 안내 모달 표시 ─────────────────────
+  const handlePublicVisibilityClick = () => {
+    if (status !== 'authenticated' || !user) return
+    if (!user.family_id) {
+      setNoFamilyModalTrigger('public')
+      setModalError('')
+      setShowNoFamilyModal(true)
+    } else {
+      setUserVisibility('public')
     }
   }
 
@@ -218,18 +242,38 @@ function CommunityWriteForm() {
 
   // ── 모달: 나만 보기로 저장하고 → 그 자리에서 가족 만들기 시트 ────────────────
   const handleSavePrivateAndCreateFamily = async () => {
+    if (loading || noFamilyModalSubmittingRef.current) return
     if (!title.trim() || !content.trim()) {
       setModalError('제목과 내용을 입력한 후 진행할 수 있어요')
       return
     }
+    noFamilyModalSubmittingRef.current = true
     setShowNoFamilyModal(false)
-    // private로 저장하되 페이지 이동은 보류 → 저장된 글 id 보관 후 가족 만들기 시트
-    const { ok, id } = await handleSubmit('private', { redirect: false })
-    if (ok) {
-      setSavedPostId(id ?? null)
-      setShowCreateSheet(true)
+    try {
+      // private로 저장하되 페이지 이동은 보류 → 저장된 글 id 보관 후 가족 만들기 시트
+      const { ok, id } = await handleSubmit('private', { redirect: false })
+      if (ok) {
+        setSavedPostId(id ?? null)
+        setShowCreateSheet(true)
+      }
+    } finally {
+      noFamilyModalSubmittingRef.current = false
     }
   }
+
+  const noFamilyModalCopy = noFamilyModalTrigger === 'public'
+    ? {
+        title: '광장에 나누려면 가족 공간이 먼저 필요해요',
+        desc: '가족 공간을 만들거나 초대를 받아야 광장에 이야기를 나눌 수 있어요.',
+        saveAndCreate: '우리 가족 공간 만들기',
+        keepPrivate: '나만 보기로 저장',
+      }
+    : {
+        title: '가족만 보기는 가족 공간이 필요해요',
+        desc: '가족 공간을 만들거나 초대를 받아야 사용할 수 있어요.',
+        saveAndCreate: '나만 보기로 저장하고 가족 만들기',
+        keepPrivate: '나만 보기로 바꾸고 계속 쓰기',
+      }
 
   return (
     // 아래에서 슬라이드업 — 작성 박스에서 확장되는 느낌
@@ -468,6 +512,7 @@ function CommunityWriteForm() {
                       setShowVisibilitySheet(false)
                       // 가족만 보기는 가족 유무 분기(없으면 안내 모달) — 기존 핸들러 재사용
                       if (v === 'family') handleFamilyVisibilityClick()
+                      else if (v === 'public') handlePublicVisibilityClick()
                       else setUserVisibility(v)
                     }}
                     className={`w-full flex items-start gap-3 px-3 py-3 rounded-2xl text-left transition-colors ${
@@ -496,8 +541,8 @@ function CommunityWriteForm() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowNoFamilyModal(false)} />
           <div className="relative bg-white w-full max-w-md rounded-t-3xl lg:rounded-3xl px-6 pt-6 pb-10 lg:pb-8 space-y-4">
             <div>
-              <p className="font-semibold text-brand-text mb-1">가족만 보기는 가족 공간이 필요해요</p>
-              <p className="text-sm text-brand-sub">가족 공간을 만들거나 초대를 받아야 사용할 수 있어요.</p>
+              <p className="font-semibold text-brand-text mb-1">{noFamilyModalCopy.title}</p>
+              <p className="text-sm text-brand-sub">{noFamilyModalCopy.desc}</p>
             </div>
 
             {modalError && <p className="text-xs text-red-500">{modalError}</p>}
@@ -508,13 +553,13 @@ function CommunityWriteForm() {
                 disabled={loading}
                 className="w-full py-3 bg-brand-green text-white text-sm font-semibold rounded-2xl disabled:opacity-50 transition-opacity"
               >
-                {loading ? '저장 중…' : '나만 보기로 저장하고 가족 만들기'}
+                {loading ? '저장 중…' : noFamilyModalCopy.saveAndCreate}
               </button>
               <button
                 onClick={() => { setUserVisibility('private'); setShowNoFamilyModal(false) }}
                 className="w-full py-3 bg-brand-card text-brand-text text-sm font-medium rounded-2xl"
               >
-                나만 보기로 바꾸고 계속 쓰기
+                {noFamilyModalCopy.keepPrivate}
               </button>
               <button
                 onClick={() => setShowNoFamilyModal(false)}
