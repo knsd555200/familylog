@@ -267,11 +267,10 @@ export async function getFamilyName(familyId: string): Promise<string | null> {
 
 // 이야기 탭 전체 보기용 가족 목록 — families 행이 있는 가정만 seq 순서로 가져온다.
 export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
-  const { data: systemUser } = await supabase
-    .from('users')
+  const { data: systemMemberships } = await supabase
+    .from('family_members')
     .select('family_id')
-    .eq('id', MILONE_SYSTEM_USER_ID)
-    .maybeSingle()
+    .eq('user_id', MILONE_SYSTEM_USER_ID)
 
   const { data, error } = await supabase
     .from('families')
@@ -280,10 +279,10 @@ export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
 
   if (error || !data) return []
 
-  // 이웃 1기 명부에서는 환영봇이 속한 시스템 가정만 제외한다.
-  const systemFamilyId = systemUser?.family_id ?? null
+  // users.family_id가 아니라 멤버십 기준으로 빼야 밀로네 family_id가 null이 되어도 견고하게 제외된다.
+  const systemFamilyIds = new Set((systemMemberships ?? []).map(row => row.family_id).filter(Boolean))
 
-  return data.filter(family => family.id !== systemFamilyId).map(family => ({
+  return data.filter(family => !systemFamilyIds.has(family.id)).map(family => ({
     id: family.id,
     name: family.name,
     avatar_url: family.avatar_url ?? null,
