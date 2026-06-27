@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { MILONE_SYSTEM_USER_ID } from '@/lib/constants'
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
@@ -266,6 +267,12 @@ export async function getFamilyName(familyId: string): Promise<string | null> {
 
 // 이야기 탭 전체 보기용 가족 목록 — families 행이 있는 가정만 seq 순서로 가져온다.
 export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
+  const { data: systemUser } = await supabase
+    .from('users')
+    .select('family_id')
+    .eq('id', MILONE_SYSTEM_USER_ID)
+    .maybeSingle()
+
   const { data, error } = await supabase
     .from('families')
     .select('id, name, avatar_url, avatar_focal_x, avatar_focal_y, seq')
@@ -273,7 +280,10 @@ export async function getAllFamilies(): Promise<FamilyAvatarSummary[]> {
 
   if (error || !data) return []
 
-  return data.map(family => ({
+  // 이웃 1기 명부에서는 환영봇이 속한 시스템 가정만 제외한다.
+  const systemFamilyId = systemUser?.family_id ?? null
+
+  return data.filter(family => family.id !== systemFamilyId).map(family => ({
     id: family.id,
     name: family.name,
     avatar_url: family.avatar_url ?? null,
