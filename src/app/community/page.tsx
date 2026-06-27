@@ -1233,6 +1233,18 @@ function CommunityPageContent() {
                   </p>
                 </div>
 
+                {/* 대표 사진 배너 — 사진이 있을 때만 보여 큰 빈 초록 면으로 §11 균형을 깨지 않게 한다. */}
+                {familyIdentity.avatarUrl && (
+                  <div className="aspect-[16/9] rounded-2xl overflow-hidden">
+                    <img
+                      src={familyIdentity.avatarUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      style={focal(familyIdentity.avatarFocalX, familyIdentity.avatarFocalY)}
+                    />
+                  </div>
+                )}
+
                 {/* ─── green 박스 — 공지 + 아바타 ──────────────────────────── */}
                 <div className="bg-brand-green-light border border-brand-green/25 rounded-2xl p-4">
                   {/* 가족 공지 — 항상 표시. 내용 없으면 placeholder(한 톤 연한 green, 클릭 시 편집 시트) */}
