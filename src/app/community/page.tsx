@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback, Fragment, Suspense } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { communityPosts } from '@/data/community'
 import { modelHousePosts, miloneIntro } from '@/data/modelHouse'
 import type { Comment, CommunityPost, FeedPost } from '@/types/post'
@@ -487,6 +487,7 @@ export default function CommunityPage() {
 
 function CommunityPageContent() {
   const { user, isLoading } = useAuth()
+  const router = useRouter()
   // 탭 상태를 URL(?tab=family)과 동기화 — 새로고침해도 우리 가족 탭 유지
   // 초기값은 항상 '이야기'(서버 렌더와 일치) → 마운트 후 effect에서 URL 복원 (hydration mismatch 방지)
   const [feedTab, setFeedTab] = useState<FeedTab>('이야기')
@@ -825,11 +826,21 @@ function CommunityPageContent() {
     setShowCreateSheet(true)
   }, [user])
 
-  const handleStoryInviteClick = useCallback(() => {
+  const handleNeighborCompose = useCallback(() => {
     if (isLoading) return
-    if (user?.family_id) { window.location.href = 'community/write'; return }
+    if (user?.family_id) { router.push('/community/write?compose=public'); return }
     changeTab('우리 가족')
-  }, [changeTab, isLoading, user?.family_id])
+  }, [changeTab, isLoading, router, user?.family_id])
+
+  const handleWriteEntryClick = useCallback(() => {
+    if (feedTab === '이야기') {
+      handleNeighborCompose()
+      return
+    }
+    // 비-이웃 탭의 전역 글쓰기 표면은 기존 목적지를 유지한다.
+    if (isLoading) return
+    router.push(user ? '/community/write' : '/login')
+  }, [feedTab, handleNeighborCompose, isLoading, router, user])
 
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
@@ -1294,7 +1305,7 @@ function CommunityPageContent() {
               ))}
               <button
                 type="button"
-                onClick={handleStoryInviteClick}
+                onClick={handleNeighborCompose}
                 className="flex w-24 aspect-[3/4] flex-shrink-0 items-center justify-center rounded-xl border border-dashed border-brand-green/45 bg-brand-green-light/70 text-brand-green shadow-sm transition-colors hover:bg-brand-green-light"
                 aria-label="우리 가족 이야기 더하기"
               >
@@ -1407,12 +1418,13 @@ function CommunityPageContent() {
                     ? '가족이 남긴 이야기가 여기 쌓여요'
                     : '첫 이야기를 남기면\n피드가 시작돼요'}
                 </p>
-                <Link
-                  href="/community/write"
+                <button
+                  type="button"
+                  onClick={handleWriteEntryClick}
                   className="px-6 py-3 bg-brand-green text-white text-sm font-medium rounded-full"
                 >
                   첫 이야기 남기기
-                </Link>
+                </button>
               </div>
             )}
             {filtered.map((post, index) => {
@@ -1634,9 +1646,10 @@ function CommunityPageContent() {
 
                   {/* 작성 유도 박스 — 2번째 글 아래 자연 삽입 */}
                   {index === 1 && (
-                    <Link
-                      href={user ? '/community/write' : '/login'}
-                      className="block bg-brand-green-light/60 rounded-2xl border-2 border-brand-green/30 p-5 hover:border-brand-green/60 hover:bg-brand-green-light transition-colors"
+                    <button
+                      type="button"
+                      onClick={handleWriteEntryClick}
+                      className="block w-full text-left bg-brand-green-light/60 rounded-2xl border-2 border-brand-green/30 p-5 hover:border-brand-green/60 hover:bg-brand-green-light transition-colors"
                     >
                       <div className="flex items-center gap-3 mb-4">
                         {user ? (
@@ -1665,7 +1678,7 @@ function CommunityPageContent() {
                         <PenSquare size={17} />
                         이야기 남기기
                       </div>
-                    </Link>
+                    </button>
                   )}
 
                   {/* 5번째 게시글(index 4) 아래에 행사 배너 삽입 */}
@@ -1735,9 +1748,14 @@ function CommunityPageContent() {
 
       {/* FAB 글쓰기 — 데스크탑 전용, 모델하우스에선 숨김 */}
       {!isModelhouse && (
-        <Link href={user ? '/community/write' : '/login'} className="hidden lg:flex fixed right-8 bottom-8 z-30 w-14 h-14 bg-brand-green rounded-full shadow-xl items-center justify-center text-white">
+        <button
+          type="button"
+          onClick={handleWriteEntryClick}
+          className="hidden lg:flex fixed right-8 bottom-8 z-30 w-14 h-14 bg-brand-green rounded-full shadow-xl items-center justify-center text-white"
+          aria-label="글쓰기"
+        >
           <PenSquare size={22} />
-        </Link>
+        </button>
       )}
 
       {/* 그리드 라이트박스 — 제목(글 이동) + 확대 사진 + 현재 글 필름 스트립 */}
