@@ -490,9 +490,9 @@ export default function MypagePage() {
       {/* ── 내 기록 탭 — author=본인 단일 소스 (private 포함) ───────────────────── */}
       {activeTab === '내 기록' && (
         <div className="px-4 lg:px-6 pt-4 pb-4">
-          {/* 상단 바 — 선택(일괄 수정/삭제) */}
+          {/* 상단 바 — 글이 있을 때 선택 관리와 새 기록 진입을 함께 둔다 */}
           {canSelect && (
-            <div className="mb-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={selectMode ? exitSelectMode : () => setSelectMode(true)}
@@ -504,6 +504,12 @@ export default function MypagePage() {
               >
                 {selectMode ? '취소' : '선택'}
               </button>
+              <Link
+                href="/community/write"
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-brand-green text-white text-xs font-semibold rounded-full"
+              >
+                <PenLine size={14} /> 기록하기
+              </Link>
             </div>
           )}
 
