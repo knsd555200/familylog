@@ -224,9 +224,9 @@ function StoryFamilyDirectoryModal({
     return (
       <section className="space-y-2">
         <h4 className="text-[11px] font-semibold text-brand-green-dark">{title}</h4>
-        <div className="grid grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           {sectionFamilies.map(family => (
-            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} avatarFocalX={family.avatar_focal_x} avatarFocalY={family.avatar_focal_y} className="w-full" />
+            <StoryFamilyCard key={family.id} name={family.name} avatarUrl={family.avatar_url} avatarFocalX={family.avatar_focal_x} avatarFocalY={family.avatar_focal_y} className="w-full max-w-28 justify-self-center" />
           ))}
         </div>
       </section>
@@ -504,7 +504,7 @@ function CommunityPageContent() {
     setFeedTab(current => current === nextTab ? current : nextTab)
   }, [searchParams])
 
-  const changeTab = (t: FeedTab) => {
+  const changeTab = useCallback((t: FeedTab) => {
     setFeedTab(t)
     const params = new URLSearchParams(window.location.search)
     if (t === '우리 가족') params.set('tab', 'family')
@@ -513,7 +513,7 @@ function CommunityPageContent() {
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
     // 실제로 다른 탭으로 전환할 때만 문서 스크롤을 상단으로 되돌린다.
     if (t !== feedTab) window.scrollTo({ top: 0 })
-  }
+  }, [feedTab])
   const [sortMode, setSortMode] = useState<SortMode>('latest') // 기본 최신순, 인기순은 옵션
   // 우리 가족 탭 보기 방식 — 대형 카드 / 사진 그리드
   const [viewMode, setViewMode] = useState<'large' | 'grid'>('large')
@@ -529,9 +529,6 @@ function CommunityPageContent() {
   const [showAllFamiliesModal, setShowAllFamiliesModal] = useState(false)
   const [allFamilies, setAllFamilies] = useState<FamilyAvatarSummary[] | null>(null)
   const [allFamiliesLoading, setAllFamiliesLoading] = useState(false)
-  const storyFamiliesScrollRef = useRef<HTMLDivElement>(null)
-  const storyFamiliesListRef = useRef<HTMLDivElement>(null)
-  const [storyFamiliesOverflowing, setStoryFamiliesOverflowing] = useState(false)
   // 모델하우스 "가족 만들기" — 그 자리 생성 시트
   const [showCreateSheet, setShowCreateSheet] = useState(false)
   // 가족 정체성(가정명·소개) 편집 시트
@@ -836,11 +833,10 @@ function CommunityPageContent() {
   }, [user])
 
   const handleStoryInviteClick = useCallback(() => {
-    if (isLoading) { showToast('잠시만 기다려 주세요'); return }
+    if (isLoading) return
     if (user?.family_id) { window.location.href = 'community/write'; return }
-    showToast('가족 공간을 만들면 여기 함께 등장해요')
-    handleModelhouseCta()
-  }, [handleModelhouseCta, isLoading, showToast, user?.family_id])
+    changeTab('우리 가족')
+  }, [changeTab, isLoading, user?.family_id])
 
   const getLikeCount = (post: CardPost) => likeCounts[post.id] ?? post.likes
   const getCommentCount = (post: CardPost) => commentCounts[post.id] ?? post.comments
@@ -869,27 +865,6 @@ function CommunityPageContent() {
   }, [popularPosts])
   const visibleStoryRecentFamilies = storyRecentFamilies.slice(0, 8)
   const activeStoryFamilyIds = useMemo(() => new Set(storyRecentFamilies.map(family => family.id)), [storyRecentFamilies])
-  const showStoryInviteCard = visibleStoryRecentFamilies.length === 0 || !storyFamiliesOverflowing
-
-  // 한 줄 넘침 여부는 실제 가로 스크롤 컨테이너의 폭으로 판단한다.
-  useEffect(() => {
-    const el = storyFamiliesScrollRef.current
-    const list = storyFamiliesListRef.current
-    if (!el || !list) {
-      setStoryFamiliesOverflowing(false)
-      return
-    }
-
-    const measure = () => {
-      setStoryFamiliesOverflowing(list.scrollWidth > el.clientWidth + 1)
-    }
-
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    ro.observe(list)
-    return () => ro.disconnect()
-  }, [visibleStoryRecentFamilies.length])
   const loadAllFamiliesOnce = useCallback(async () => {
     if (allFamilies !== null || allFamiliesLoading) return
     setAllFamiliesLoading(true)
@@ -1312,37 +1287,26 @@ function CommunityPageContent() {
               </button>
             </div>
 
-            <div ref={storyFamiliesScrollRef} className="flex gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
               {/* 이야기 쇼츠 카드는 아직 이동 경로가 없어 비클릭 가로 목록으로만 보여준다. */}
-              <div ref={storyFamiliesListRef} className="flex flex-shrink-0 gap-2">
-                {visibleStoryRecentFamilies.map(family => (
-                  <StoryFamilyCard
-                    key={family.id}
-                    name={family.name}
-                    avatarUrl={family.avatarUrl}
-                    avatarFocalX={family.avatarFocalX}
-                    avatarFocalY={family.avatarFocalY}
-                    className="w-24 flex-shrink-0"
-                  />
-                ))}
-              </div>
-              {showStoryInviteCard && (
-                <button
-                  type="button"
-                  onClick={handleStoryInviteClick}
-                  className="w-24 aspect-[3/4] flex-shrink-0 rounded-xl border border-dashed border-brand-green/45 bg-brand-green-light/70 px-2 text-center text-brand-green-dark shadow-sm transition-colors hover:bg-brand-green-light"
-                >
-                  <span className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-brand-green/10 text-brand-green">
-                    <Plus size={18} />
-                  </span>
-                  <span className="block text-[11px] font-medium leading-snug">
-                    {isLoading || !user?.family_id ? '가족 공간을 만들면 여기 함께 등장해요' : '우리 가족 이야기도 들려주세요'}
-                  </span>
-                  <span className="mt-2 block text-[10px] font-semibold leading-tight text-brand-green">
-                    {isLoading || !user?.family_id ? '우리 가족 공간 만들기' : '전체공개 이야기 쓰기'}
-                  </span>
-                </button>
-              )}
+              {visibleStoryRecentFamilies.map(family => (
+                <StoryFamilyCard
+                  key={family.id}
+                  name={family.name}
+                  avatarUrl={family.avatarUrl}
+                  avatarFocalX={family.avatarFocalX}
+                  avatarFocalY={family.avatarFocalY}
+                  className="w-24 flex-shrink-0"
+                />
+              ))}
+              <button
+                type="button"
+                onClick={handleStoryInviteClick}
+                className="flex w-24 aspect-[3/4] flex-shrink-0 items-center justify-center rounded-xl border border-dashed border-brand-green/45 bg-brand-green-light/70 text-brand-green shadow-sm transition-colors hover:bg-brand-green-light"
+                aria-label="우리 가족 이야기 더하기"
+              >
+                <Plus size={28} />
+              </button>
             </div>
           </div>
         )}
