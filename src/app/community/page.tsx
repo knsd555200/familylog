@@ -1241,7 +1241,7 @@ function CommunityPageContent() {
         {feedTab === '이야기' && (
           <div className="px-4 pt-2 pb-5">
             <p className="font-serif text-2xl font-bold text-brand-text leading-snug">
-              서로 다른 가정의 하루가 이곳에 모여요
+              이웃 이야기
             </p>
           </div>
         )}
